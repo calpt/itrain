@@ -18,7 +18,7 @@ from transformers.adapter_bert import get_fusion_regularization_loss
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput
 
 from .arguments import RunArguments
-from .dataset_manager import DatasetManager
+from .datasets import DatasetManager
 
 
 logger = logging.getLogger(__name__)
@@ -459,7 +459,7 @@ class Runner:
             label_ids = label_ids.cpu().numpy()
 
         if self.dataset_manager.metric is not None and preds is not None and label_ids is not None:
-            metrics = self.dataset_manager.compute_metric(preds, label_ids)
+            metrics = self.dataset_manager.compute_metrics(preds, label_ids)
         else:
             metrics = {}
         if len(eval_losses) > 0:

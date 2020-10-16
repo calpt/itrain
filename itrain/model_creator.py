@@ -1,7 +1,7 @@
 from transformers import AdapterConfig, AdapterType, AutoConfig, AutoModelWithHeads, AutoTokenizer
 
 from .arguments import ModelArguments
-from .dataset_manager import DatasetManager
+from .datasets import DatasetManager
 
 
 def create_tokenizer(args: ModelArguments):

@@ -6,13 +6,12 @@ from enum import IntEnum
 from typing import List, Union
 
 import numpy as np
-import torch
-from datasets import GenerateMode, Metric, load_dataset, load_metric
+from datasets import GenerateMode, Metric, Split, load_dataset, load_metric
 from transformers import PreTrainedTokenizerBase, default_data_collator
 from transformers.file_utils import torch_cache_home
 
-from .arguments import DatasetArguments
-from .ext.super_glue import SuperGlue
+from ..arguments import DatasetArguments
+from ..ext.super_glue import SuperGlue
 
 
 DATASET_FEATURES_CACHE = os.path.join(torch_cache_home, "itrain")
@@ -93,20 +92,20 @@ class DatasetManager(ABC):
     def collate_fn(self, features):
         return default_data_collator(features)
 
-    def compute_metric(self, predictions, references):
+    def compute_metrics(self, predictions, references):
         return self.metric.compute(predictions=predictions, references=references)
 
     @property
     def train_split(self):
-        return self.dataset[self.split_names[0]] if self.split_names[0] else None
+        return self.dataset[Split.TRAIN] if Split.TRAIN in self.dataset else None
 
     @property
     def dev_split(self):
-        return self.dataset[self.split_names[1]] if self.split_names[1] else None
+        return self.dataset[Split.VALIDATION] if Split.VALIDATION in self.dataset else None
 
     @property
     def test_split(self):
-        return self.dataset[self.split_names[2]] if self.split_names[2] else None
+        return self.dataset[Split.TEST] if Split.TEST in self.dataset else None
 
     @abstractmethod
     def get_prediction_head_config(self):
@@ -114,8 +113,6 @@ class DatasetManager(ABC):
 
 
 class GlueManager(DatasetManager):
-    dataset_id = "glue"
-    split_names = ("train", "validation", "test")
     tasks_num_labels = {
         "cola": 2,
         "mnli": 3,
@@ -161,7 +158,7 @@ class GlueManager(DatasetManager):
         encoded.update({"labels": examples[self.column_config.label]})
         return encoded
 
-    def compute_metric(self, predictions, references):
+    def compute_metrics(self, predictions, references):
         predictions = np.argmax(predictions, axis=1)
         return self.metric.compute(predictions=predictions, references=references)
 
@@ -175,8 +172,6 @@ class GlueManager(DatasetManager):
 
 
 class SuperGlueManager(DatasetManager):
-    dataset_id = "super_glue"
-    split_names = ("train", "validation", "test")
     tasks_num_labels = {
         "boolq": 2,
         "cb": 3,
@@ -264,7 +259,7 @@ class SuperGlueManager(DatasetManager):
         encoded.update({"labels": examples[self.column_config.label]})
         return encoded
 
-    def compute_metric(self, predictions, references):
+    def compute_metrics(self, predictions, references):
         predictions = np.argmax(predictions, axis=1)
         return self.metric.compute(predictions=predictions, references=references)
 
@@ -277,72 +272,7 @@ class SuperGlueManager(DatasetManager):
         }
 
 
-class SquadV1Manager(DatasetManager):
-    dataset_id = "squad"
-    split_names = ("train", "validation", None)
-    label_column_names = ["start_positions", "end_positions"]
-
-    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
-        super().__init__(args, tokenizer)
-        self.column_config = ColumnConfig(["context", "question"], "answers")
-
-    def _get_correct_alignement(self, context, answer):
-        """ Some original examples in SQuAD have indices wrong by 1 or 2 character. We test and fix this here. """
-        # TODO
-        if len(answer["text"]) < 1:
-            return 0, 1
-        gold_text = answer["text"][0]
-        start_idx = answer["answer_start"][0]
-        end_idx = start_idx + len(gold_text)
-        if context[start_idx:end_idx] == gold_text:
-            return start_idx, end_idx  # When the gold label position is good
-        elif context[start_idx - 1 : end_idx - 1] == gold_text:
-            return start_idx - 1, end_idx - 1  # When the gold label is off by one character
-        elif context[start_idx - 2 : end_idx - 2] == gold_text:
-            return start_idx - 2, end_idx - 2  # When the gold label is off by two character
-        else:
-            raise ValueError()
-
-    def encode_batch(self, examples):
-        encoded = self.tokenizer(
-            examples["context"],
-            examples["question"],
-            max_length=self.args.max_seq_length,
-            truncation=True,
-            padding="max_length",
-        )
-        start_positions, end_positions = [], []
-        for i, (context, answer) in enumerate(zip(examples["context"], examples["answers"])):
-            start_idx, end_idx = self._get_correct_alignement(context, answer)
-            assert encoded.char_to_token(i, start_idx) is not None
-            start_positions.append(encoded.char_to_token(i, start_idx))
-            end_positions.append(encoded.char_to_token(i, end_idx - 1))
-        encoded.update({'start_positions': start_positions, 'end_positions': end_positions})
-        return encoded
-
-    def collate_fn(self, features):
-        batch = default_data_collator(features)
-        # HACK: fixes labels for adapter-transformers qa head
-        batch["labels"] = torch.stack([batch["start_positions"], batch["end_positions"]])
-        del batch["start_positions"]
-        del batch["end_positions"]
-        return batch
-
-    def get_prediction_head_config(self):
-        return {
-            "head_type": "question_answering",
-            "num_labels": 2,
-            "layers": 1,
-            "activation_function": "tanh",
-        }
-
-
-class SquadV2Manager(SquadV1Manager):
-    dataset_id = "squad_v2"
-
-
 class MultipleChoiceDatasetManager(DatasetManager):
-    split_names = ("train", "validation", "test")
 
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer, load_metric=False)
@@ -382,7 +312,7 @@ class MultipleChoiceDatasetManager(DatasetManager):
         }
         return encoded
 
-    def compute_metric(self, predictions, references):
+    def compute_metrics(self, predictions, references):
         predictions = np.argmax(predictions, axis=1)
         return {"acc": (predictions == references).mean()}
 
@@ -396,7 +326,6 @@ class MultipleChoiceDatasetManager(DatasetManager):
 
 
 class HellaswagManager(MultipleChoiceDatasetManager):
-    dataset_id = "hellaswag"
 
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer)
@@ -405,15 +334,8 @@ class HellaswagManager(MultipleChoiceDatasetManager):
 
 
 class RaceManager(MultipleChoiceDatasetManager):
-    dataset_id = "race"
 
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer)
         self.column_config = ColumnConfig(["article", "question", "options"], "answer")
         self.choice_label_map = {v: k for (k, v) in enumerate(["A", "B", "C", "D"])}
-
-
-DATASET_MANAGER_CLASSES = {}
-for name, obj in globals().copy().items():
-    if inspect.isclass(obj) and issubclass(obj, DatasetManager) and hasattr(obj, "dataset_id"):
-        DATASET_MANAGER_CLASSES[obj.dataset_id] = obj
