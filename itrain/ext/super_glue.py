@@ -17,6 +17,8 @@
 import datasets
 from sklearn.metrics import f1_score, matthews_corrcoef
 
+from .record_evaluation import evaluate as evaluate_record
+
 
 _CITATION = """\
 @article{wang2019superglue,
@@ -62,6 +64,27 @@ def acc_and_f1(preds, labels, f1_avg="binary"):
     }
 
 
+def evaluate_multirc(ids_preds, labels):
+    question_map = {}
+    for id_pred, label in zip(ids_preds, labels):
+        question_id = "{}-{}".format(id_pred["idx"]["paragraph"], id_pred["idx"]["question"])
+        pred = id_pred["prediction"]
+        if question_id in question_map:
+            question_map[question_id].append((pred, label))
+        else:
+            question_map[question_id] = [(pred, label)]
+    f1s, ems = [], []
+    for question, preds_labels in question_map.items():
+        question_preds, question_labels = zip(*preds_labels)
+        f1 = f1_score(y_true=question_labels, y_pred=question_preds)
+        f1s.append(f1)
+        em = int(sum([p == l for p, l in preds_labels]) == len(preds_labels))
+        ems.append(em)
+    avg_f1 = sum(f1s) / len(f1s)
+    avg_em = sum(ems) / len(ems)
+    return {"f1": avg_f1, "em": avg_em}
+
+
 class SuperGlue(datasets.Metric):
     def _info(self):
         if self.config_name not in [
@@ -85,25 +108,65 @@ class SuperGlue(datasets.Metric):
             description=_DESCRIPTION,
             citation=_CITATION,
             inputs_description=_KWARGS_DESCRIPTION,
-            features=datasets.Features(
-                {
-                    "predictions": datasets.Value("int64" if self.config_name != "stsb" else "float32"),
-                    "references": datasets.Value("int64" if self.config_name != "stsb" else "float32"),
-                }
-            ),
+            features=datasets.Features(self._get_feature_types()),
             codebase_urls=[],
             reference_urls=[],
-            format="numpy",
         )
 
+    def _get_feature_types(self):
+        if self.config_name == "record":
+            return {
+                "predictions": {
+                    "idx": {
+                        "passage": datasets.Value("int64"),
+                        "query": datasets.Value("int64"),
+                    },
+                    "prediction_text": datasets.Value("string"),
+                },
+                "references": {
+                    "idx": {
+                        "passage": datasets.Value("int64"),
+                        "query": datasets.Value("int64"),
+                    },
+                    "answers": datasets.Sequence(datasets.Value("string")),
+                },
+            }
+        elif self.config_name == "multirc":
+            return {
+                "predictions": {
+                    "idx": {
+                        "answer": datasets.Value("int64"),
+                        "paragraph": datasets.Value("int64"),
+                        "question": datasets.Value("int64"),
+                    },
+                    "prediction": datasets.Value("int64"),
+                },
+                "references": datasets.Value("int64"),
+            }
+        else:
+            return {
+                "predictions": datasets.Value("int64"),
+                "references": datasets.Value("int64"),
+            }
+
     def _compute(self, predictions, references):
-        # TODO missing multirc & record
         if self.config_name == "axb":
             return {"matthews_correlation": matthews_corrcoef(references, predictions)}
         elif self.config_name == "cb":
             return acc_and_f1(predictions, references, f1_avg="macro")
-        # elif self.config_name == "record":
-        #     return acc_and_f1(predictions, references)
+        elif self.config_name == "record":
+            dataset = [
+                {
+                    "qas": [
+                        {"id": ref["idx"]["query"], "answers": [{"text": ans} for ans in ref["answers"]]}
+                        for ref in references
+                    ]
+                }
+            ]
+            predictions = {pred["idx"]["query"]: pred["prediction_text"] for pred in predictions}
+            return evaluate_record(dataset, predictions)[0]
+        elif self.config_name == "multirc":
+            return evaluate_multirc(predictions, references)
         elif self.config_name in ["copa", "rte", "wic", "wsc", "wsc.fixed", "boolq", "axg"]:
             return {"accuracy": simple_accuracy(predictions, references)}
         else:

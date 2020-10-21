@@ -18,7 +18,7 @@ setup(
         "sklearn",
         "tgsend >= 0.2",
         "torch",
-        "tqdm"
+        "tqdm",
         "yagmail",
         "keyring",
     ],

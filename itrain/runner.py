@@ -45,7 +45,7 @@ class Runner:
         do_save_adapters: bool = False,
         do_save_adapter_fusion: bool = False,
     ):
-        self.model = model
+        self.model = model.to(args.device)
         self.args = args
         self.dataset_manager = dataset_manager
         self.tb_writer = SummaryWriter(self.args.logging_dir)
@@ -55,6 +55,7 @@ class Runner:
         self.do_save_adapter_fusion = do_save_adapter_fusion
 
         set_seed(self.args.seed)
+        os.makedirs(self.args.output_dir, exist_ok=True)
 
     def get_train_dataloader(self) -> DataLoader:
         if self.dataset_manager.train_split is None:
@@ -347,8 +348,8 @@ class Runner:
 
         return loss.item()
 
-    def save_model(self):
-        output_dir = self.args.output_dir
+    def save_model(self, output_dir: Optional[str] = None):
+        output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
         logger.info("Saving model checkpoint to %s", output_dir)
         if self.do_save_adapters:

@@ -1,6 +1,8 @@
 import inspect
+import logging
 import os
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import List, Union
@@ -17,6 +19,8 @@ from ..ext.super_glue import SuperGlue
 DATASET_FEATURES_CACHE = os.path.join(torch_cache_home, "itrain")
 if not os.path.exists(DATASET_FEATURES_CACHE):
     os.makedirs(DATASET_FEATURES_CACHE)
+
+logger = logging.getLogger(__name__)
 
 
 class CacheMode(IntEnum):
@@ -177,7 +181,7 @@ class SuperGlueManager(DatasetManager):
         "cb": 3,
         "copa": 2,
         "multirc": 2,
-        # "record",
+        "record": 2,
         "rte": 2,
         "wic": 2,
         "wsc": 2,
@@ -207,7 +211,10 @@ class SuperGlueManager(DatasetManager):
         elif self.args.task_name == "axb":
             self.column_config = ColumnConfig(["sentence1", "sentence2"], "label")
             self._encode_batch = self._encode_batch_classification
-        # TODO record ? wic ? wsc ?
+        elif self.args.task_name == "record":
+            self.column_config = ColumnConfig(["passage", "query", "entities"], "answers")
+            self._encode_batch = self._encode_batch_record
+        # TODO wic ? wsc ?
         else:
             raise ValueError()
 
@@ -242,6 +249,37 @@ class SuperGlueManager(DatasetManager):
         encoded.update({"labels": examples[self.column_config.label]})
         return encoded
 
+    def _encode_batch_record(self, examples):
+        encoded = defaultdict(list)
+        for idx, passage, query, entities, answers in zip(
+            examples["idx"], examples["passage"], examples["query"], examples["entities"], examples["answers"]
+        ):
+            for entity in entities:
+                label = 1 if entity in answers else 0
+                query = query.replace("@placeholder", entity)
+                example_encoded = self.tokenizer(
+                    passage,
+                    query,
+                    max_length=self.args.max_seq_length,
+                    truncation=True,
+                    padding="max_length",
+                    return_overflowing_tokens=True,
+                )
+                if "overflowing_tokens" in example_encoded and len(example_encoded["overflowing_tokens"]) > 0:
+                    logger.info("Cropping {0} tokens of input.".format(len(example_encoded["overflowing_tokens"])))
+                encoded["idx"].append(idx)
+                encoded["passage"].append(passage)
+                encoded["query"].append(query)
+                encoded["entities"].append(entity)
+                encoded["answers"].append(answers)
+                encoded["input_ids"].append(example_encoded["input_ids"])
+                encoded["labels"].append(label)
+                if "token_type_ids" in example_encoded:
+                    encoded["token_type_ids"].append(example_encoded["token_type_ids"])
+                if "attention_mask" in example_encoded:
+                    encoded["attention_mask"].append(example_encoded["attention_mask"])
+        return encoded
+
     def _encode_batch_wic(self, examples):
         raise NotImplementedError()  # TODO WIC & WSC seem to need span classification ?
 
@@ -261,6 +299,11 @@ class SuperGlueManager(DatasetManager):
 
     def compute_metrics(self, predictions, references):
         predictions = np.argmax(predictions, axis=1)
+        if self.args.task_name == "multirc":
+            predictions = [{"idx": idx, "prediction": pred} for idx, pred in zip(self.dev_split["idx"], predictions)]
+        elif self.args.task_name == "record":
+            # TODO
+            pass
         return self.metric.compute(predictions=predictions, references=references)
 
     def get_prediction_head_config(self):
@@ -273,7 +316,6 @@ class SuperGlueManager(DatasetManager):
 
 
 class MultipleChoiceDatasetManager(DatasetManager):
-
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer, load_metric=False)
 
@@ -296,7 +338,10 @@ class MultipleChoiceDatasetManager(DatasetManager):
                 max_length=self.args.max_seq_length,
                 truncation=True,
                 padding="max_length",
+                return_overflowing_tokens=True,
             )
+            if "overflowing_tokens" in encoded and len(encoded["overflowing_tokens"]) > 0:
+                logger.info("Cropping {0} tokens of input.".format(len(encoded["overflowing_tokens"][0])))
             input_ids.append(encoded["input_ids"])
             if "token_type_ids" in encoded:
                 token_type_ids.append(encoded["token_type_ids"])
@@ -304,17 +349,18 @@ class MultipleChoiceDatasetManager(DatasetManager):
                 attention_mask.append(encoded["attention_mask"])
         encoded = {
             "input_ids": input_ids,
-            "token_type_ids": token_type_ids,
             "attention_mask": attention_mask,
             "labels": [
                 self.choice_label_map[label] if label else None for label in examples[self.column_config.label]
             ],
         }
+        if len(token_type_ids) > 0:
+            encoded["token_type_ids"] = token_type_ids
         return encoded
 
     def compute_metrics(self, predictions, references):
         predictions = np.argmax(predictions, axis=1)
-        return {"acc": (predictions == references).mean()}
+        return {"accuracy": (predictions == references).mean()}
 
     def get_prediction_head_config(self):
         return {
@@ -326,7 +372,6 @@ class MultipleChoiceDatasetManager(DatasetManager):
 
 
 class HellaswagManager(MultipleChoiceDatasetManager):
-
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer)
         self.column_config = ColumnConfig(["ctx_a", "ctx_b", "endings"], "label")
@@ -334,7 +379,6 @@ class HellaswagManager(MultipleChoiceDatasetManager):
 
 
 class RaceManager(MultipleChoiceDatasetManager):
-
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer)
         self.column_config = ColumnConfig(["article", "question", "options"], "answer")
