@@ -5,7 +5,7 @@ import random
 import re
 import shutil
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -15,7 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm, trange
 from transformers import AdamW, PreTrainedModel, get_linear_schedule_with_warmup
 from transformers.adapter_bert import get_fusion_regularization_loss
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput, nested_concat, nested_numpify
 
 from .arguments import RunArguments
 from .datasets import DatasetManager
@@ -29,6 +29,13 @@ def set_seed(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+
+class TrainingOutput(NamedTuple):
+    global_step: int
+    training_loss: float
+    best_eval_score: float
+    best_model_dir: str
 
 
 class Runner:
@@ -53,6 +60,9 @@ class Runner:
         self.do_save_full_model = do_save_full_model
         self.do_save_adapters = do_save_adapters
         self.do_save_adapter_fusion = do_save_adapter_fusion
+
+        self.global_step = None
+        self.epoch = None
 
         set_seed(self.args.seed)
         os.makedirs(self.args.output_dir, exist_ok=True)
@@ -159,10 +169,7 @@ class Runner:
             self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
 
         # Train!
-        total_train_batch_size = (
-            self.args.batch_size
-            * self.args.gradient_accumulation_steps
-        )
+        total_train_batch_size = self.args.batch_size * self.args.gradient_accumulation_steps
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_dataloader.dataset))
         logger.info("  Num Epochs = %d", num_train_epochs)
@@ -196,11 +203,10 @@ class Runner:
         tr_loss = 0.0
         logging_loss = 0.0
         best_eval_score = None
+        best_model_dir = None
         evals_without_improvement = 0
         model.zero_grad()
-        train_iterator = trange(
-            epochs_trained, int(num_train_epochs), desc="Epoch"
-        )
+        train_iterator = trange(epochs_trained, int(num_train_epochs), desc="Epoch")
         for epoch in train_iterator:
 
             epoch_iterator = tqdm(train_dataloader, desc="Iteration")
@@ -236,7 +242,7 @@ class Runner:
                     self.global_step += 1
                     self.epoch = epoch + (step + 1) / len(epoch_iterator)
 
-                if ((self.args.max_steps > 0 and self.global_step > self.args.max_steps)):
+                if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
                     epoch_iterator.close()
                     break
 
@@ -281,29 +287,28 @@ class Runner:
                         else:
                             assert model is self.model
                         # Save model checkpoint
-                        output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-best")
+                        if not best_model_dir:
+                            best_model_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-best")
+                        self.save_model(best_model_dir)
 
-                        self.save_model(output_dir)
-
-                        torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                        torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                        torch.save(optimizer.state_dict(), os.path.join(best_model_dir, "optimizer.pt"))
+                        torch.save(scheduler.state_dict(), os.path.join(best_model_dir, "scheduler.pt"))
 
                         # Save eval results
-                        with open(os.path.join(output_dir, "results.json"), "w") as f:
+                        with open(os.path.join(best_model_dir, "results.json"), "w") as f:
                             json.dump(results, f)
                     else:
                         evals_without_improvement += 1
                         if evals_without_improvement >= self.args.patience:
-                            logger.info(
-                                f"Early stopping threshold ({self.args.patience}) exceeded, stopping training"
-                            )
+                            logger.info(f"Early stopping threshold ({self.args.patience}) exceeded, stopping training")
                 # log eval results
                 logger.info("***** Eval results {} *****".format(self.dataset_manager.name))
                 for key, value in results.items():
                     logger.info("  %s = %s", key, value)
 
-            if ((self.args.max_steps > 0 and self.global_step > self.args.max_steps) or (
-                    self.args.patience > 0 and evals_without_improvement >= self.args.patience)):
+            if (self.args.max_steps > 0 and self.global_step > self.args.max_steps) or (
+                self.args.patience > 0 and evals_without_improvement >= self.args.patience
+            ):
                 train_iterator.close()
                 break
 
@@ -311,7 +316,7 @@ class Runner:
             self.tb_writer.close()
 
         logger.info("Training completed.")
-        return self.global_step, tr_loss / self.global_step, best_eval_score
+        return TrainingOutput(self.global_step, tr_loss / self.global_step, best_eval_score, best_model_dir)
 
     def _log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         if self.epoch is not None:
@@ -331,12 +336,25 @@ class Runner:
         else:
             return current > best
 
+    def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
+        """
+        Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
+        handling potential state.
+        """
+        for k, v in inputs.items():
+            if isinstance(v, torch.Tensor):
+                inputs[k] = v.to(self.args.device)
+
+        if self.args.past_index >= 0 and self._past is not None:
+            inputs["mems"] = self._past
+
+        return inputs
+
     def _training_step(
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
     ) -> float:
         model.train()
-        for k, v in inputs.items():
-            inputs[k] = v.to(self.args.device)
+        inputs = self._prepare_inputs(inputs)
 
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
@@ -395,11 +413,15 @@ class Runner:
             shutil.rmtree(checkpoint)
 
     def evaluate(
-        self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None,
+        self,
+        eval_dataset: Optional[Dataset] = None,
+        prediction_loss_only: Optional[bool] = None,
     ) -> Dict[str, float]:
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
-        output = self._prediction_loop(eval_dataloader, description="Evaluation")
+        output = self.prediction_loop(
+            eval_dataloader, description="Evaluation", prediction_loss_only=prediction_loss_only
+        )
 
         self._log(output.metrics)
 
@@ -408,16 +430,23 @@ class Runner:
     def predict(self, test_dataset: Dataset) -> PredictionOutput:
         test_dataloader = self.get_test_dataloader(test_dataset)
 
-        return self._prediction_loop(test_dataloader, description="Prediction")
+        return self.prediction_loop(test_dataloader, description="Prediction")
 
-    def _prediction_loop(
-        self, dataloader: DataLoader, description: str,
+    def prediction_loop(
+        self, dataloader: DataLoader, description: str, prediction_loss_only: bool = False
     ) -> PredictionOutput:
         """
-        Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
-
+        Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
         Works both with or without labels.
         """
+
+        assert not getattr(
+            self.model.config, "output_attentions", False
+        ), "The prediction loop does not work with `output_attentions=True`."
+        assert not getattr(
+            self.model.config, "output_hidden_states", False
+        ), "The prediction loop does not work with `output_hidden_states=True`."
+
         model = self.model
 
         batch_size = dataloader.batch_size
@@ -429,35 +458,28 @@ class Runner:
         label_ids: torch.Tensor = None
         model.eval()
 
+        if self.args.past_index >= 0:
+            self._past = None
+
         for inputs in tqdm(dataloader, desc=description):
-            has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
+            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
+            batch_size = inputs[list(inputs.keys())[0]].shape[0]
+            if loss is not None:
+                eval_losses.extend([loss] * batch_size)
+            if logits is not None:
+                preds = logits if preds is None else nested_concat(preds, logits, dim=0)
+            if labels is not None:
+                label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
 
-            for k, v in inputs.items():
-                inputs[k] = v.to(self.args.device)
-
-            with torch.no_grad():
-                outputs = model(**inputs)
-                if has_labels:
-                    step_eval_loss, logits = outputs[:2]
-                    eval_losses += [step_eval_loss.mean().item()]
-                else:
-                    logits = outputs[0]
-
-            if preds is None:
-                preds = logits.detach()
-            else:
-                preds = torch.cat((preds, logits.detach()), dim=0)
-            if inputs.get("labels") is not None:
-                if label_ids is None:
-                    label_ids = inputs["labels"].detach()
-                else:
-                    label_ids = torch.cat((label_ids, inputs["labels"].detach()), dim=0)
+        if self.args.past_index and hasattr(self, "_past"):
+            # Clean the state at the end of the evaluation loop
+            delattr(self, "_past")
 
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
-            preds = preds.cpu().numpy()
+            preds = nested_numpify(preds)
         if label_ids is not None:
-            label_ids = label_ids.cpu().numpy()
+            label_ids = nested_numpify(label_ids)
 
         if self.dataset_manager.metric is not None and preds is not None and label_ids is not None:
             metrics = self.dataset_manager.compute_metrics(preds, label_ids)
@@ -472,3 +494,54 @@ class Runner:
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
+
+    def prediction_step(
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
+    ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+        """
+        Perform an evaluation step on :obj:`model` using obj:`inputs`.
+        Subclass and override to inject custom behavior.
+        Args:
+            model (:obj:`nn.Module`):
+                The model to evaluate.
+            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+                The inputs and targets of the model.
+                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
+                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
+            prediction_loss_only (:obj:`bool`):
+                Whether or not to return the loss only.
+        Return:
+            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+            A tuple with the loss, logits and labels (each being optional).
+        """
+        has_labels = any(inputs.get(k) is not None for k in self.dataset_manager.input_label_column_names)
+        inputs = self._prepare_inputs(inputs)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+            if has_labels:
+                # The .mean() is to reduce in case of distributed training
+                loss = outputs[0].mean().item()
+                logits = outputs[1:]
+            else:
+                loss = None
+                # Slicing so we get a tuple even if `outputs` is a `ModelOutput`.
+                logits = outputs[:]
+            if self.args.past_index >= 0:
+                self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
+
+        if prediction_loss_only:
+            return (loss, None, None)
+
+        logits = tuple(logit.detach() for logit in logits)
+        if len(logits) == 1:
+            logits = logits[0]
+
+        if has_labels:
+            labels = tuple(inputs.get(name).detach() for name in self.dataset_manager.input_label_column_names)
+            if len(labels) == 1:
+                labels = labels[0]
+        else:
+            labels = None
+
+        return (loss, logits, labels)

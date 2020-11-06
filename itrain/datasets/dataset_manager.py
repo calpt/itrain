@@ -37,17 +37,18 @@ class ColumnConfig:
 
 class DatasetManager(ABC):
     label_column_names = ["labels"]
+    input_label_column_names = ["labels"]
 
     def __init__(
         self,
         args: DatasetArguments,
         tokenizer: PreTrainedTokenizerBase = None,
-        load_metric: Union[bool, Metric] = True,
     ):
         self.args = args
         self._dataset_loc = self.args.dataset_dir or self.args.dataset_name
         self.tokenizer = tokenizer
-        self.load_metric = load_metric
+        self.dataset = {}
+        self.metric = None
 
     @property
     def name(self):
@@ -55,6 +56,53 @@ class DatasetManager(ABC):
             return f"{self.args.dataset_name}_{self.args.task_name}"
         else:
             return self.args.dataset_name
+
+    def _get_features_cache_file(self, split_name):
+        return os.path.join(
+            DATASET_FEATURES_CACHE,
+            "_".join([self.tokenizer.__class__.__name__, self.args.identifier, split_name]) + ".cached",
+        )
+
+    @abstractmethod
+    def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
+        pass
+
+    def collate_fn(self, features):
+        return default_data_collator(features)
+
+    @abstractmethod
+    def compute_metrics(self, predictions, references):
+        pass
+
+    @property
+    def train_split(self):
+        return self.dataset[Split.TRAIN] if Split.TRAIN in self.dataset else None
+
+    @property
+    def dev_split(self):
+        return self.dataset[Split.VALIDATION] if Split.VALIDATION in self.dataset else None
+
+    @property
+    def test_split(self):
+        return self.dataset[Split.TEST] if Split.TEST in self.dataset else None
+
+    @abstractmethod
+    def get_prediction_head_config(self):
+        pass
+
+
+class DatasetManagerBase(DatasetManager):
+
+    def __init__(
+        self,
+        args: DatasetArguments,
+        tokenizer: PreTrainedTokenizerBase = None,
+        load_metric: Union[bool, Metric] = True,
+    ):
+        super().__init__(args, tokenizer)
+        self._padding = "max_length"
+        self._truncation = True
+        self.load_metric = load_metric
 
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # load dataset
@@ -84,10 +132,7 @@ class DatasetManager(ABC):
     def _encode(self, load_from_cache=True):
         cache_files = {}
         for split_name in self.dataset.keys():
-            cache_files[split_name] = os.path.join(
-                DATASET_FEATURES_CACHE,
-                "_".join([self.tokenizer.__class__.__name__, self.args.identifier, split_name]) + ".arrow",
-            )
+            cache_files[split_name] = self._get_features_cache_file(split_name)
         self.dataset = self.dataset.map(
             self.encode_batch, batched=True, cache_file_names=cache_files, load_from_cache_file=load_from_cache
         )
@@ -99,24 +144,8 @@ class DatasetManager(ABC):
     def compute_metrics(self, predictions, references):
         return self.metric.compute(predictions=predictions, references=references)
 
-    @property
-    def train_split(self):
-        return self.dataset[Split.TRAIN] if Split.TRAIN in self.dataset else None
 
-    @property
-    def dev_split(self):
-        return self.dataset[Split.VALIDATION] if Split.VALIDATION in self.dataset else None
-
-    @property
-    def test_split(self):
-        return self.dataset[Split.TEST] if Split.TEST in self.dataset else None
-
-    @abstractmethod
-    def get_prediction_head_config(self):
-        pass
-
-
-class GlueManager(DatasetManager):
+class GlueManager(DatasetManagerBase):
     tasks_num_labels = {
         "cola": 2,
         "mnli": 3,
@@ -156,8 +185,8 @@ class GlueManager(DatasetManager):
             examples[self.column_config.inputs[0]],
             examples[self.column_config.inputs[1]] if len(self.column_config.inputs) > 1 else None,
             max_length=self.args.max_seq_length,
-            truncation=True,
-            padding="max_length",
+            truncation=self._truncation,
+            padding=self._padding,
         )
         encoded.update({"labels": examples[self.column_config.label]})
         return encoded
@@ -175,7 +204,7 @@ class GlueManager(DatasetManager):
         }
 
 
-class SuperGlueManager(DatasetManager):
+class SuperGlueManager(DatasetManagerBase):
     tasks_num_labels = {
         "boolq": 2,
         "cb": 3,
@@ -229,8 +258,8 @@ class SuperGlueManager(DatasetManager):
             sentences_a,
             sentences_b,
             max_length=self.args.max_seq_length,
-            truncation=True,
-            padding="max_length",
+            truncation=self._truncation,
+            padding=self._padding,
         )
         encoded.update({"labels": examples[self.column_config.label]})
         return encoded
@@ -243,8 +272,8 @@ class SuperGlueManager(DatasetManager):
             contexts,
             examples["answer"],
             max_length=self.args.max_seq_length,
-            truncation=True,
-            padding="max_length",
+            truncation=self._truncation,
+            padding=self._padding,
         )
         encoded.update({"labels": examples[self.column_config.label]})
         return encoded
@@ -262,7 +291,7 @@ class SuperGlueManager(DatasetManager):
                     query,
                     max_length=self.args.max_seq_length,
                     truncation=True,
-                    padding="max_length",
+                    padding=self._padding,
                     return_overflowing_tokens=True,
                 )
                 if "overflowing_tokens" in example_encoded and len(example_encoded["overflowing_tokens"]) > 0:
@@ -291,19 +320,28 @@ class SuperGlueManager(DatasetManager):
             examples[self.column_config.inputs[0]],
             examples[self.column_config.inputs[1]] if len(self.column_config.inputs) > 1 else None,
             max_length=self.args.max_seq_length,
-            truncation=True,
-            padding="max_length",
+            truncation=self._truncation,
+            padding=self._padding,
         )
         encoded.update({"labels": examples[self.column_config.label]})
         return encoded
 
     def compute_metrics(self, predictions, references):
-        predictions = np.argmax(predictions, axis=1)
         if self.args.task_name == "multirc":
+            predictions = np.argmax(predictions, axis=1)
             predictions = [{"idx": idx, "prediction": pred} for idx, pred in zip(self.dev_split["idx"], predictions)]
         elif self.args.task_name == "record":
-            # TODO
-            pass
+            max_preds = {}  # group predictions by question id
+            for idx, entity, pred, answers in zip(
+                self.dev_split["idx"], self.dev_split["entities"], predictions, self.dev_split["answers"]
+            ):
+                idx_string = f"{idx['passage']}-{idx['query']}"
+                if idx_string not in max_preds or pred[1] > max_preds[idx_string]["logit"]:
+                    max_preds[idx_string] = {"idx": idx, "logit": pred[1], "entity": entity, "answers": answers}
+            predictions = [{"idx": val["idx"], "prediction_text": val["entity"]} for _, val in max_preds.items()]
+            references = [{"idx": val["idx"], "answers": val["answers"]} for _, val in max_preds.items()]
+        else:
+            predictions = np.argmax(predictions, axis=1)
         return self.metric.compute(predictions=predictions, references=references)
 
     def get_prediction_head_config(self):
@@ -315,7 +353,7 @@ class SuperGlueManager(DatasetManager):
         }
 
 
-class MultipleChoiceDatasetManager(DatasetManager):
+class MultipleChoiceDatasetManager(DatasetManagerBase):
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer, load_metric=False)
 
@@ -336,11 +374,11 @@ class MultipleChoiceDatasetManager(DatasetManager):
                 a_s,
                 b_s,
                 max_length=self.args.max_seq_length,
-                truncation=True,
-                padding="max_length",
+                truncation=self._truncation,
+                padding=self._padding,
                 return_overflowing_tokens=True,
             )
-            if "overflowing_tokens" in encoded and len(encoded["overflowing_tokens"]) > 0:
+            if "overflowing_tokens" in encoded and len(encoded["overflowing_tokens"][0]) > 0:
                 logger.info("Cropping {0} tokens of input.".format(len(encoded["overflowing_tokens"][0])))
             input_ids.append(encoded["input_ids"])
             if "token_type_ids" in encoded:
@@ -375,7 +413,7 @@ class HellaswagManager(MultipleChoiceDatasetManager):
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer)
         self.column_config = ColumnConfig(["ctx_a", "ctx_b", "endings"], "label")
-        self.choice_label_map = {v: k for (k, v) in enumerate(["1", "2", "3", "4"])}
+        self.choice_label_map = {v: k for (k, v) in enumerate(["0", "1", "2", "3"])}
 
 
 class RaceManager(MultipleChoiceDatasetManager):

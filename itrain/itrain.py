@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import Union
+from typing import Optional, Union
 
 from transformers import PreTrainedModel
 
@@ -28,6 +28,7 @@ class Setup:
         self.model_instance = None
         self.model_args = None
         self._train_run_args = None
+        self._do_eval = False
         self._eval_run_args = None
         self._notifiers = {}
 
@@ -51,7 +52,8 @@ class Setup:
     def training(self, args: RunArguments):
         self._train_run_args = args
 
-    def evaluation(self, args: RunArguments):
+    def evaluation(self, args: Optional[RunArguments] = None):
+        self._do_eval = True
         self._eval_run_args = args
 
     def notify(self, notifier_name: str, **kwargs):
@@ -65,7 +67,10 @@ class Setup:
         if "training" in config:
             self.training(RunArguments(**config["training"]))
         if "evaluation" in config:
-            self.evaluation(RunArguments(**config["evaluation"]))
+            if isinstance(config["evaluation"], dict):
+                self.evaluation(RunArguments(**config["evaluation"]))
+            elif config["evaluation"]:
+                self.evaluation()
         if "notify" in config:
             self.notify(config["notify"])
 
@@ -80,7 +85,6 @@ class Setup:
             )
 
     def run(self):
-        # TODO
         if self._train_run_args:
             set_seed(self._train_run_args.seed)
         else:
@@ -110,25 +114,34 @@ class Setup:
             for notifier in self._notifiers.values():
                 notifier.notify_start(message="Training setup:", **self._train_run_args.to_sanitized_dict())
             try:
-                step, loss, best_score = runner.train(
+                step, loss, best_score, best_model_dir = runner.train(
                     self.model_args.model_name_or_path if os.path.isdir(self.model_args.model_name_or_path) else None
                 )
-                runner.save_model()
             except Exception as ex:
                 for notifier in self._notifiers.values():
                     notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
                 raise ex
             # if no evaluation is done, we're at the end here
-            if not self._eval_run_args:
+            if not self._do_eval:
                 for notifier in self._notifiers.values():
                     notifier.notify_end(message="Training results:", step=step, loss=loss, best_score=best_score)
+            # otherwise, reload the best model for evaluation
+            elif best_model_dir:
+                logger.info("Reloading best model for evaluation.")
+                if self.model_args.train_adapter:
+                    for adapter_name in self.model_instance.config.adapters.adapters:
+                        path = os.path.join(best_model_dir, adapter_name)
+                        self.model_instance.load_adapter(path)
+                else:
+                    self.model_instance = self.model_instance.from_pretrained(best_model_dir)
 
         # Configure and run eval
-        if self._eval_run_args:
-            self._auto_fill_dirs(self._eval_run_args)
+        if self._do_eval:
+            eval_run_args = self._eval_run_args or self._train_run_args
+            self._auto_fill_dirs(eval_run_args)
             runner = Runner(
                 self.model_instance,
-                self._eval_run_args,
+                eval_run_args,
                 self.dataset_manager,
                 do_save_full_model=not self.model_args.train_adapter,
                 do_save_adapters=self.model_args.train_adapter,
@@ -136,7 +149,7 @@ class Setup:
             try:
                 results = runner.evaluate()
                 output_eval_file = os.path.join(
-                    self._eval_run_args.output_dir, f"eval_results_{self.dataset_manager.name}.txt"
+                    eval_run_args.output_dir, f"eval_results_{self.dataset_manager.name}.txt"
                 )
             except Exception as ex:
                 for notifier in self._notifiers.values():

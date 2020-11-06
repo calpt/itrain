@@ -50,43 +50,43 @@ class TelegramNotifier(Notifier):
     def __init__(self, recipients: List[str] = None, title=None):
         super().__init__(title=title)
         self.recipients = recipients
-        self.telegram = Telegram()
+        self.telegram = Telegram(parse_mode=ParseMode.HTML)
 
     def notify_start(self, message=None, **kwargs):
         self.start_time = datetime.datetime.now()
-        title = self.telegram._bold("Started: " + self.title, ParseMode.HTML) + "\n\n"
+        title = " Started: " + self.title
+        text = self.telegram.format_fixed(self._format_kwargs(kwargs))
         if message:
-            title += message + "\n"
-        text = self.telegram._fixed(self._format_kwargs(kwargs), ParseMode.HTML)
+            text = message + "\n" + text
         text += self._get_run_time()
         if self.recipients:
             for recipient in self.recipients:
-                self.telegram.send_message(title + text, chat_id=recipient, parse_mode=ParseMode.HTML, icon=START_ICON)
+                self.telegram.send_message(text, title=title, chat_id=recipient, icon=START_ICON)
         else:
-            self.telegram.send_message(title + text, parse_mode=ParseMode.HTML, icon=START_ICON)
+            self.telegram.send_message(text, title=title, icon=START_ICON)
 
     def notify_error(self, error_message):
         self.end_time = datetime.datetime.now()
-        title = self.telegram._bold("FAILED: " + self.title, ParseMode.HTML) + "\n\n"
+        title = "FAILED: " + self.title
         text = error_message + self._get_run_time()
         if self.recipients:
             for recipient in self.recipients:
-                self.telegram.send_message(title + text, chat_id=recipient, parse_mode=ParseMode.HTML, icon=ERROR_ICON)
+                self.telegram.send_message(text, title=title, chat_id=recipient, icon=ERROR_ICON)
         else:
-            self.telegram.send_message(title + text, parse_mode=ParseMode.HTML, icon=ERROR_ICON)
+            self.telegram.send_message(text, title=title, icon=ERROR_ICON)
 
     def notify_end(self, message=None, **kwargs):
         self.end_time = datetime.datetime.now()
-        title = self.telegram._bold("Finished: " + self.title, ParseMode.HTML) + "\n\n"
+        title = "Finished: " + self.title
+        text = self.telegram.format_fixed(self._format_kwargs(kwargs))
         if message:
-            title += message + "\n"
-        text = self.telegram._fixed(self._format_kwargs(kwargs), ParseMode.HTML)
+            text = message + "\n" + text
         text += self._get_run_time()
         if self.recipients:
             for recipient in self.recipients:
-                self.telegram.send_message(title + text, chat_id=recipient, parse_mode=ParseMode.HTML, icon=END_ICON)
+                self.telegram.send_message(text, title=title, chat_id=recipient, icon=END_ICON)
         else:
-            self.telegram.send_message(title + text, parse_mode=ParseMode.HTML, icon=END_ICON)
+            self.telegram.send_message(text, title=title, icon=END_ICON)
 
 
 class EmailNotifier(Notifier):

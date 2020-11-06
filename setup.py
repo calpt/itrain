@@ -16,7 +16,7 @@ setup(
         "adapter-transformers",
         "datasets",
         "sklearn",
-        "tgsend >= 0.2",
+        "tgsend >= 0.3",
         "torch",
         "tqdm",
         "yagmail",

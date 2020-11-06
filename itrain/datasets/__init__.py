@@ -4,6 +4,7 @@ from .dataset_manager import (
     CacheMode,
     ColumnConfig,
     DatasetManager,
+    DatasetManagerBase,
     GlueManager,
     HellaswagManager,
     RaceManager,

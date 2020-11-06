@@ -77,7 +77,7 @@ class RunArguments:
             "help": "If > 0 stops training after evaluating this many times consecutively with non-decreasing loss."
         },
     )
-    patience_metric: str = field(default="loss", metadata={"help": "Metric used for early stopping. Loss by default."})
+    patience_metric: str = field(default="eval_loss", metadata={"help": "Metric used for early stopping. Loss by default."})
 
     batch_size: int = field(default=16, metadata={"help": "Batch size."})
 
@@ -112,6 +112,11 @@ class RunArguments:
     )
 
     seed: int = field(default=42, metadata={"help": "random seed for initialization"})
+
+    past_index: int = field(
+        default=-1,
+        metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
+    )
 
     @property
     def device(self):
