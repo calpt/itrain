@@ -6,14 +6,16 @@ from .dataset_manager import (
     DatasetManager,
     DatasetManagerBase,
     GlueManager,
-    HellaswagManager,
-    RaceManager,
+    SimpleClassificationManager,
     SuperGlueManager,
 )
+from .multiple_choice import HellaswagManager, RaceManager
 from .squad import SquadV1Manager, SquadV2Manager
 
 
 DATASET_MANAGER_CLASSES = {
+    "imdb": SimpleClassificationManager,
+    "rotten_tomatoes": SimpleClassificationManager,
     "glue": GlueManager,
     "super_glue": SuperGlueManager,
     "hellaswag": HellaswagManager,

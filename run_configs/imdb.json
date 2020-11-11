@@ -1,8 +1,7 @@
 {
     "dataset": {
-        "dataset_name": "super_glue",
-        "task_name": "boolq",
-        "max_seq_length": 384
+        "dataset_name": "imdb",
+        "max_seq_length": 256
     },
     "model": {
         "model_name_or_path": "roberta-base",

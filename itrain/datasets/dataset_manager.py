@@ -49,6 +49,9 @@ class DatasetManager(ABC):
         self.tokenizer = tokenizer
         self.dataset = {}
         self.metric = None
+        self.train_split_name = Split.TRAIN
+        self.dev_split_name = Split.VALIDATION
+        self.test_split_name = Split.TEST
 
     @property
     def name(self):
@@ -76,15 +79,15 @@ class DatasetManager(ABC):
 
     @property
     def train_split(self):
-        return self.dataset[Split.TRAIN] if Split.TRAIN in self.dataset else None
+        return self.dataset[self.train_split_name] if self.train_split_name in self.dataset else None
 
     @property
     def dev_split(self):
-        return self.dataset[Split.VALIDATION] if Split.VALIDATION in self.dataset else None
+        return self.dataset[self.dev_split_name] if self.dev_split_name in self.dataset else None
 
     @property
     def test_split(self):
-        return self.dataset[Split.TEST] if Split.TEST in self.dataset else None
+        return self.dataset[self.test_split_name] if self.test_split_name in self.dataset else None
 
     @abstractmethod
     def get_prediction_head_config(self):
@@ -145,40 +148,23 @@ class DatasetManagerBase(DatasetManager):
         return self.metric.compute(predictions=predictions, references=references)
 
 
-class GlueManager(DatasetManagerBase):
+class SimpleClassificationManager(DatasetManagerBase):
     tasks_num_labels = {
-        "cola": 2,
-        "mnli": 3,
-        "mrpc": 2,
-        "sst-2": 2,
-        "sts-b": 1,
-        "qqp": 2,
-        "qnli": 2,
-        "rte": 2,
-        "wnli": 2,
+        "imdb": 2,
+        "rotten_tomatoes": 2,
     }
 
-    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
-        super().__init__(args, tokenizer)
-        self.column_config = self._get_column_config()
+    def __init__(
+        self,
+        args: DatasetArguments,
+        tokenizer: PreTrainedTokenizerBase = None,
+        load_metric: Union[bool, Metric] = False,
+    ):
+        super().__init__(args, tokenizer, load_metric=load_metric)
+        self._configure()
 
-    def _get_column_config(self):
-        if self.args.task_name == "mrpc" or self.args.task_name == "rte" or self.args.task_name == "wnli":
-            return ColumnConfig(["sentence1", "sentence2"], "label")
-        elif self.args.task_name == "sst2":
-            return ColumnConfig(["sentence"], "label")
-        elif self.args.task_name == "cola":
-            return ColumnConfig(["sentence"], "is_acceptable")
-        elif self.args.task_name == "qqp":
-            return ColumnConfig(["question1", "question2"], "is_duplicate")
-        elif self.args.task_name == "stsb":
-            return ColumnConfig(["sentence1", "sentence2"], "score")
-        elif self.args.task_name == "mnli":
-            return ColumnConfig(["premise", "hypothesis"], "gold_label")
-        elif self.args.task_name == "qnli":
-            return ColumnConfig(["question", "sentence"], "label")
-        else:
-            raise ValueError()
+    def _configure(self):
+        self.column_config = ColumnConfig(["text"], "label")
 
     def encode_batch(self, examples):
         encoded = self.tokenizer(
@@ -193,15 +179,57 @@ class GlueManager(DatasetManagerBase):
 
     def compute_metrics(self, predictions, references):
         predictions = np.argmax(predictions, axis=1)
-        return self.metric.compute(predictions=predictions, references=references)
+        return {"accuracy": (predictions == references).mean()}
 
     def get_prediction_head_config(self):
         return {
             "head_type": "classification",
-            "num_labels": self.tasks_num_labels[self.args.task_name],
+            "num_labels": self.tasks_num_labels[self.args.task_name or self.args.dataset_name],
             "layers": 2,
             "activation_function": "tanh",
         }
+
+
+class GlueManager(SimpleClassificationManager):
+    tasks_num_labels = {
+        "cola": 2,
+        "mnli": 3,
+        "mrpc": 2,
+        "sst2": 2,
+        "stsb": 1,
+        "qqp": 2,
+        "qnli": 2,
+        "rte": 2,
+        "wnli": 2,
+    }
+
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer, load_metric=True)
+
+    def _configure(self):
+        if self.args.task_name == "mrpc" or self.args.task_name == "rte" or self.args.task_name == "wnli" or self.args.task_name == "stsb":
+            self.column_config = ColumnConfig(["sentence1", "sentence2"], "label")
+        elif self.args.task_name == "sst2":
+            self.column_config = ColumnConfig(["sentence"], "label")
+        elif self.args.task_name == "cola":
+            self.column_config = ColumnConfig(["sentence"], "label")
+        elif self.args.task_name == "qqp":
+            self.column_config = ColumnConfig(["question1", "question2"], "label")
+        elif self.args.task_name == "mnli":
+            self.column_config = ColumnConfig(["premise", "hypothesis"], "label")
+            self.dev_split_name = "validation_matched"
+            self.test_split_name = "test_matched"
+        elif self.args.task_name == "qnli":
+            self.column_config = ColumnConfig(["question", "sentence"], "label")
+        else:
+            raise ValueError()
+
+    def compute_metrics(self, predictions, references):
+        if self.args.task_name == "stsb":
+            predictions = np.squeeze(predictions)
+        else:
+            predictions = np.argmax(predictions, axis=1)
+        return self.metric.compute(predictions=predictions, references=references)
 
 
 class SuperGlueManager(DatasetManagerBase):
@@ -351,73 +379,3 @@ class SuperGlueManager(DatasetManagerBase):
             "layers": 2,
             "activation_function": "tanh",
         }
-
-
-class MultipleChoiceDatasetManager(DatasetManagerBase):
-    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
-        super().__init__(args, tokenizer, load_metric=False)
-
-    def _build_input_choice(self, question, ending):
-        if "_" in question:
-            return question.replace("_", ending)
-        else:
-            return question + " " + ending
-
-    def encode_batch(self, examples):
-        input_ids = []
-        token_type_ids = []
-        attention_mask = []
-        for context, question, endings in zip(*[examples[c] for c in self.column_config.inputs]):
-            a_s = [context for _ in range(4)]
-            b_s = [self._build_input_choice(question, endings[i]) for i in range(4)]
-            encoded = self.tokenizer(
-                a_s,
-                b_s,
-                max_length=self.args.max_seq_length,
-                truncation=self._truncation,
-                padding=self._padding,
-                return_overflowing_tokens=True,
-            )
-            if "overflowing_tokens" in encoded and len(encoded["overflowing_tokens"][0]) > 0:
-                logger.info("Cropping {0} tokens of input.".format(len(encoded["overflowing_tokens"][0])))
-            input_ids.append(encoded["input_ids"])
-            if "token_type_ids" in encoded:
-                token_type_ids.append(encoded["token_type_ids"])
-            if "attention_mask" in encoded:
-                attention_mask.append(encoded["attention_mask"])
-        encoded = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "labels": [
-                self.choice_label_map[label] if label else None for label in examples[self.column_config.label]
-            ],
-        }
-        if len(token_type_ids) > 0:
-            encoded["token_type_ids"] = token_type_ids
-        return encoded
-
-    def compute_metrics(self, predictions, references):
-        predictions = np.argmax(predictions, axis=1)
-        return {"accuracy": (predictions == references).mean()}
-
-    def get_prediction_head_config(self):
-        return {
-            "head_type": "multiple_choice",
-            "num_choices": 4,
-            "layers": 2,
-            "activation_function": "tanh",
-        }
-
-
-class HellaswagManager(MultipleChoiceDatasetManager):
-    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
-        super().__init__(args, tokenizer)
-        self.column_config = ColumnConfig(["ctx_a", "ctx_b", "endings"], "label")
-        self.choice_label_map = {v: k for (k, v) in enumerate(["0", "1", "2", "3"])}
-
-
-class RaceManager(MultipleChoiceDatasetManager):
-    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
-        super().__init__(args, tokenizer)
-        self.column_config = ColumnConfig(["article", "question", "options"], "answer")
-        self.choice_label_map = {v: k for (k, v) in enumerate(["A", "B", "C", "D"])}

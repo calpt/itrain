@@ -416,6 +416,7 @@ class Runner:
         self,
         eval_dataset: Optional[Dataset] = None,
         prediction_loss_only: Optional[bool] = None,
+        log: Optional[bool] = True,
     ) -> Dict[str, float]:
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
@@ -423,7 +424,8 @@ class Runner:
             eval_dataloader, description="Evaluation", prediction_loss_only=prediction_loss_only
         )
 
-        self._log(output.metrics)
+        if log:
+            self._log(output.metrics)
 
         return output.metrics
 
@@ -481,7 +483,7 @@ class Runner:
         if label_ids is not None:
             label_ids = nested_numpify(label_ids)
 
-        if self.dataset_manager.metric is not None and preds is not None and label_ids is not None:
+        if preds is not None and label_ids is not None:
             metrics = self.dataset_manager.compute_metrics(preds, label_ids)
         else:
             metrics = {}

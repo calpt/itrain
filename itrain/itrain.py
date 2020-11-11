@@ -147,7 +147,7 @@ class Setup:
                 do_save_adapters=self.model_args.train_adapter,
             )
             try:
-                results = runner.evaluate()
+                results = runner.evaluate(log=False)
                 output_eval_file = os.path.join(
                     eval_run_args.output_dir, f"eval_results_{self.dataset_manager.name}.txt"
                 )
