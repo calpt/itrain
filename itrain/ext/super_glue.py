@@ -111,6 +111,7 @@ class SuperGlue(datasets.Metric):
             features=datasets.Features(self._get_feature_types()),
             codebase_urls=[],
             reference_urls=[],
+            format="numpy" if not self.config_name == "record" and not self.config_name == "multirc" else None,
         )
 
     def _get_feature_types(self):

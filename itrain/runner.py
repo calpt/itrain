@@ -15,7 +15,8 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm, trange
 from transformers import AdamW, PreTrainedModel, get_linear_schedule_with_warmup
 from transformers.adapter_bert import get_fusion_regularization_loss
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput, nested_concat, nested_numpify
+from transformers.trainer_pt_utils import nested_concat, nested_numpify
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput
 
 from .arguments import RunArguments
 from .datasets import DatasetManager
@@ -33,6 +34,7 @@ def set_seed(seed: int):
 
 class TrainingOutput(NamedTuple):
     global_step: int
+    epoch: float
     training_loss: float
     best_eval_score: float
     best_model_dir: str
@@ -81,10 +83,10 @@ class Runner:
         return data_loader
 
     def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
-        if eval_dataset is None and self.dataset_manager.dev_split is None:
+        if eval_dataset is None and self.dataset_manager.dev_split is None and self.dataset_manager.test_split is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
-        eval_dataset = eval_dataset if eval_dataset is not None else self.dataset_manager.dev_split
+        eval_dataset = eval_dataset or self.dataset_manager.dev_split or self.dataset_manager.test_split
 
         data_loader = DataLoader(
             eval_dataset,
@@ -316,7 +318,7 @@ class Runner:
             self.tb_writer.close()
 
         logger.info("Training completed.")
-        return TrainingOutput(self.global_step, tr_loss / self.global_step, best_eval_score, best_model_dir)
+        return TrainingOutput(self.global_step, self.epoch, tr_loss / self.global_step, best_eval_score, best_model_dir)
 
     def _log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         if self.epoch is not None:
@@ -469,9 +471,9 @@ class Runner:
             if loss is not None:
                 eval_losses.extend([loss] * batch_size)
             if logits is not None:
-                preds = logits if preds is None else nested_concat(preds, logits, dim=0)
+                preds = logits if preds is None else nested_concat(preds, logits, padding_index=-100)
             if labels is not None:
-                label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
+                label_ids = labels if label_ids is None else nested_concat(label_ids, labels, padding_index=-100)
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop

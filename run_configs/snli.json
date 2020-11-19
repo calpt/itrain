@@ -1,20 +1,20 @@
 {
     "dataset": {
-        "dataset_name": "super_glue",
-        "task_name": "multirc"
+        "dataset_name": "snli",
+        "max_seq_length": 80
     },
     "model": {
         "model_name_or_path": "roberta-base",
-        "use_fast_tokenizer": false,
+        "use_fast_tokenizer": true,
         "train_adapter": true,
         "adapter_config": "pfeiffer"
     },
     "training": {
         "learning_rate": 1e-4,
-        "batch_size": 16,
+        "batch_size": 32,
         "num_train_epochs": 15,
-        "patience": 5,
-        "patience_metric": "eval_em"
+        "patience": 4,
+        "patience_metric": "eval_accuracy"
     },
     "evaluation": true,
     "notify": "telegram"

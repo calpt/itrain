@@ -20,13 +20,18 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
         else:
             return question + " " + ending
 
+    def _build_inputs(self, example):
+        context, question, endings = example
+        a_s = [context for _ in range(len(self.choice_label_map))]
+        b_s = [self._build_input_choice(question, endings[i]) for i in range(len(self.choice_label_map))]
+        return a_s, b_s
+
     def encode_batch(self, examples):
         input_ids = []
         token_type_ids = []
         attention_mask = []
-        for context, question, endings in zip(*[examples[c] for c in self.column_config.inputs]):
-            a_s = [context for _ in range(4)]
-            b_s = [self._build_input_choice(question, endings[i]) for i in range(4)]
+        for example in zip(*[examples[c] for c in self.column_config.inputs]):
+            a_s, b_s = self._build_inputs(example)
             encoded = self.tokenizer(
                 a_s,
                 b_s,
@@ -60,7 +65,7 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
     def get_prediction_head_config(self):
         return {
             "head_type": "multiple_choice",
-            "num_choices": 4,
+            "num_choices": len(self.choice_label_map),
             "layers": 2,
             "activation_function": "tanh",
         }
@@ -78,3 +83,25 @@ class RaceManager(MultipleChoiceDatasetManager):
         super().__init__(args, tokenizer)
         self.column_config = ColumnConfig(["article", "question", "options"], "answer")
         self.choice_label_map = {v: k for (k, v) in enumerate(["A", "B", "C", "D"])}
+
+
+class QuailManager(MultipleChoiceDatasetManager):
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer)
+        self.column_config = ColumnConfig(["context", "question", "answers"], "correct_answer_id")
+        self.choice_label_map = {v: k for (k, v) in enumerate(range(4))}
+
+
+class ARTManager(MultipleChoiceDatasetManager):
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer)
+        self.column_config = ColumnConfig(["observation_1", "observation_2", "hypothesis_1", "hypothesis_2"], "label")
+        self.choice_label_map = {v: k for (k, v) in enumerate([1, 2])}
+
+    def _build_inputs(self, example):
+        a_s = [
+            example[0] + " " + example[2],
+            example[0] + " " + example[3]
+        ]
+        b_s = [example[1] for _ in range(2)]
+        return a_s, b_s

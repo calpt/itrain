@@ -114,7 +114,7 @@ class Setup:
             for notifier in self._notifiers.values():
                 notifier.notify_start(message="Training setup:", **self._train_run_args.to_sanitized_dict())
             try:
-                step, loss, best_score, best_model_dir = runner.train(
+                step, epoch, loss, best_score, best_model_dir = runner.train(
                     self.model_args.model_name_or_path if os.path.isdir(self.model_args.model_name_or_path) else None
                 )
             except Exception as ex:
@@ -124,7 +124,7 @@ class Setup:
             # if no evaluation is done, we're at the end here
             if not self._do_eval:
                 for notifier in self._notifiers.values():
-                    notifier.notify_end(message="Training results:", step=step, loss=loss, best_score=best_score)
+                    notifier.notify_end(message="Training results:", step=step, training_epochs=epoch, loss=loss, best_score=best_score)
             # otherwise, reload the best model for evaluation
             elif best_model_dir:
                 logger.info("Reloading best model for evaluation.")
@@ -134,6 +134,8 @@ class Setup:
                         self.model_instance.load_adapter(path)
                 else:
                     self.model_instance = self.model_instance.from_pretrained(best_model_dir)
+        else:
+            epoch = None
 
         # Configure and run eval
         if self._do_eval:
@@ -160,6 +162,8 @@ class Setup:
                 for key, value in results.items():
                     logger.info("  %s = %s", key, value)
                     f.write("%s = %s\n" % (key, value))
+            if epoch:
+                results["training_epochs"] = epoch
             for notifier in self._notifiers.values():
                 notifier.notify_end(message="Evaluation results:", **results)
 

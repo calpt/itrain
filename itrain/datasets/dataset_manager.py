@@ -8,7 +8,7 @@ from enum import IntEnum
 from typing import List, Union
 
 import numpy as np
-from datasets import GenerateMode, Metric, Split, load_dataset, load_metric
+from datasets import GenerateMode, Metric, Split, concatenate_datasets, load_dataset, load_metric
 from transformers import PreTrainedTokenizerBase, default_data_collator
 from transformers.file_utils import torch_cache_home
 
@@ -103,6 +103,7 @@ class DatasetManagerBase(DatasetManager):
         load_metric: Union[bool, Metric] = True,
     ):
         super().__init__(args, tokenizer)
+        self._use_task_name_for_loading = True
         self._padding = "max_length"
         self._truncation = True
         self.load_metric = load_metric
@@ -116,7 +117,7 @@ class DatasetManagerBase(DatasetManager):
         )
         self.dataset = load_dataset(
             self._dataset_loc,
-            self.args.task_name,
+            self.args.task_name if self._use_task_name_for_loading else None,
             download_mode=download_mode,
         )
         # convert examples to transformers features
@@ -152,6 +153,7 @@ class SimpleClassificationManager(DatasetManagerBase):
     tasks_num_labels = {
         "imdb": 2,
         "rotten_tomatoes": 2,
+        "emo": 4,
     }
 
     def __init__(
@@ -166,6 +168,9 @@ class SimpleClassificationManager(DatasetManagerBase):
     def _configure(self):
         self.column_config = ColumnConfig(["text"], "label")
 
+    def _map_labels(self, examples):
+        return examples[self.column_config.label]
+
     def encode_batch(self, examples):
         encoded = self.tokenizer(
             examples[self.column_config.inputs[0]],
@@ -174,7 +179,7 @@ class SimpleClassificationManager(DatasetManagerBase):
             truncation=self._truncation,
             padding=self._padding,
         )
-        encoded.update({"labels": examples[self.column_config.label]})
+        encoded.update({"labels": self._map_labels(examples)})
         return encoded
 
     def compute_metrics(self, predictions, references):
@@ -188,6 +193,59 @@ class SimpleClassificationManager(DatasetManagerBase):
             "layers": 2,
             "activation_function": "tanh",
         }
+
+
+class SNLIManager(SimpleClassificationManager):
+    tasks_num_labels = {
+        "snli": 3
+    }
+
+    def _configure(self):
+        self.column_config = ColumnConfig(["premise", "hypothesis"], "label")
+
+
+class ANLIManager(SimpleClassificationManager):
+    tasks_num_labels = {
+        "r1": 3,
+        "r2": 3,
+        "r3": 3,
+    }
+
+    def _configure(self):
+        self._use_task_name_for_loading = False
+        self.column_config = ColumnConfig(["premise", "hypothesis"], "label")
+        self.train_split_name = "train_" + self.args.task_name
+        self.dev_split_name = "dev_" + self.args.task_name
+        self.test_split_name = "test_" + self.args.task_name
+
+    @property
+    def train_split(self):
+        if self.args.task_name == "r1":
+            return self.dataset["train_r1"]
+        elif self.args.task_name == "r2":
+            return concatenate_datasets([self.dataset["train_r1"], self.dataset["train_r2"]])
+        elif self.args.task_name == "r3":
+            return concatenate_datasets([self.dataset["train_r1"], self.dataset["train_r2"], self.dataset["train_r3"]])
+        else:
+            raise ValueError("Invalid task_name")
+
+
+class EmotionDatasetManager(SimpleClassificationManager):
+    tasks_num_labels = {
+        "emotion": 6
+    }
+
+    emotion_label2id = {
+        "sadness": 0,
+        "joy": 1,
+        "love": 2,
+        "anger": 3,
+        "fear": 4,
+        "surprise": 5
+    }
+
+    def _map_labels(self, examples):
+        return [self.emotion_label2id[label] for label in examples[self.column_config.label]]
 
 
 class GlueManager(SimpleClassificationManager):

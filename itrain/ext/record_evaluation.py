@@ -77,8 +77,8 @@ def evaluate(dataset, predictions):
 
             f1 += metric_max_over_ground_truths(f1_score, prediction, ground_truths)
 
-    exact_match = 100.0 * exact_match / total
-    f1 = 100.0 * f1 / total
+    exact_match = exact_match / total
+    f1 = f1 / total
     print('* Exact_match: {}\n* F1: {}'.format(exact_match, f1))
 
     return {'exact_match': exact_match, 'f1': f1}, correct_ids
