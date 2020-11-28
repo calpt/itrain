@@ -14,6 +14,11 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer, load_metric=False)
 
+    def _custom_filter(self, example):
+        return example[self.column_config.label] in self.choice_label_map and all(
+            [example[col] is not None for col in self.column_config.inputs]
+        )
+
     def _build_input_choice(self, question, ending):
         if "_" in question:
             return question.replace("_", ending)
@@ -40,8 +45,8 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
                 padding=self._padding,
                 return_overflowing_tokens=True,
             )
-            if "overflowing_tokens" in encoded and len(encoded["overflowing_tokens"][0]) > 0:
-                logger.info("Cropping {0} tokens of input.".format(len(encoded["overflowing_tokens"][0])))
+            # if "overflowing_tokens" in encoded and len(encoded["overflowing_tokens"][0]) > 0:
+            #     logger.info("Cropping {0} tokens of input.".format(len(encoded["overflowing_tokens"][0])))
             input_ids.append(encoded["input_ids"])
             if "token_type_ids" in encoded:
                 token_type_ids.append(encoded["token_type_ids"])
@@ -50,9 +55,7 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
         encoded = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "labels": [
-                self.choice_label_map[label] if label else None for label in examples[self.column_config.label]
-            ],
+            "labels": [self.choice_label_map.get(label, None) for label in examples[self.column_config.label]],
         }
         if len(token_type_ids) > 0:
             encoded["token_type_ids"] = token_type_ids
@@ -99,9 +102,6 @@ class ARTManager(MultipleChoiceDatasetManager):
         self.choice_label_map = {v: k for (k, v) in enumerate([1, 2])}
 
     def _build_inputs(self, example):
-        a_s = [
-            example[0] + " " + example[2],
-            example[0] + " " + example[3]
-        ]
+        a_s = [example[0] + " " + example[2], example[0] + " " + example[3]]
         b_s = [example[1] for _ in range(2)]
         return a_s, b_s

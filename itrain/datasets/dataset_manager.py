@@ -120,6 +120,9 @@ class DatasetManagerBase(DatasetManager):
             self.args.task_name if self._use_task_name_for_loading else None,
             download_mode=download_mode,
         )
+        # filter
+        self.dataset[self.train_split_name] = self.dataset[self.train_split_name].filter(self._custom_filter)
+        self.dataset[self.dev_split_name] = self.dataset[self.dev_split_name].filter(self._custom_filter)
         # convert examples to transformers features
         self._encode(load_from_cache=cache_mode >= CacheMode.USE_DATASET_USE_FEATURES)
         # load metric
@@ -128,6 +131,9 @@ class DatasetManagerBase(DatasetManager):
                 self.metric = self.load_metric(self.args.task_name)
             else:
                 self.metric = load_metric(self.args.dataset_name, self.args.task_name)
+
+    def _custom_filter(self, example):
+        return True  # Override for custom filtering
 
     @abstractmethod
     def encode_batch(self, examples):
@@ -154,6 +160,7 @@ class SimpleClassificationManager(DatasetManagerBase):
         "imdb": 2,
         "rotten_tomatoes": 2,
         "emo": 4,
+        "yelp_polarity": 2,
     }
 
     def __init__(
@@ -170,6 +177,9 @@ class SimpleClassificationManager(DatasetManagerBase):
 
     def _map_labels(self, examples):
         return examples[self.column_config.label]
+
+    def _custom_filter(self, example):
+        return example[self.column_config.label] > -1
 
     def encode_batch(self, examples):
         encoded = self.tokenizer(
@@ -246,6 +256,9 @@ class EmotionDatasetManager(SimpleClassificationManager):
 
     def _map_labels(self, examples):
         return [self.emotion_label2id[label] for label in examples[self.column_config.label]]
+
+    def _custom_filter(self, example):
+        return example[self.column_config.label] in self.emotion_label2id
 
 
 class GlueManager(SimpleClassificationManager):
@@ -380,8 +393,8 @@ class SuperGlueManager(DatasetManagerBase):
                     padding=self._padding,
                     return_overflowing_tokens=True,
                 )
-                if "overflowing_tokens" in example_encoded and len(example_encoded["overflowing_tokens"]) > 0:
-                    logger.info("Cropping {0} tokens of input.".format(len(example_encoded["overflowing_tokens"])))
+                # if "overflowing_tokens" in example_encoded and len(example_encoded["overflowing_tokens"]) > 0:
+                #     logger.info("Cropping {0} tokens of input.".format(len(example_encoded["overflowing_tokens"])))
                 encoded["idx"].append(idx)
                 encoded["passage"].append(passage)
                 encoded["query"].append(query)

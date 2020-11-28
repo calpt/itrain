@@ -20,6 +20,7 @@ DATASET_MANAGER_CLASSES = {
     "imdb": SimpleClassificationManager,
     "rotten_tomatoes": SimpleClassificationManager,
     "emo": SimpleClassificationManager,
+    "yelp_polarity": SimpleClassificationManager,
     "snli": SNLIManager,
     "anli": ANLIManager,
     "emotion": EmotionDatasetManager,

@@ -134,6 +134,7 @@ class Setup:
                         self.model_instance.load_adapter(path)
                 else:
                     self.model_instance = self.model_instance.from_pretrained(best_model_dir)
+                    self.model_instance.active_head = self.dataset_manager.name
         else:
             epoch = None
 
