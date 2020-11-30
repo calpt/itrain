@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm, trange
 from transformers import AdamW, PreTrainedModel, get_linear_schedule_with_warmup
-from transformers.adapter_bert import get_fusion_regularization_loss
+from transformers.adapter_modeling import get_fusion_regularization_loss
 from transformers.trainer_pt_utils import nested_concat, nested_numpify
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput
 
@@ -485,7 +485,7 @@ class Runner:
         if label_ids is not None:
             label_ids = nested_numpify(label_ids)
 
-        if preds is not None and label_ids is not None:
+        if preds is not None and label_ids is not None or self.dataset_manager.always_call_metrics:
             metrics = self.dataset_manager.compute_metrics(preds, label_ids)
         else:
             metrics = {}
@@ -518,7 +518,7 @@ class Runner:
             Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
             A tuple with the loss, logits and labels (each being optional).
         """
-        has_labels = any(inputs.get(k) is not None for k in self.dataset_manager.input_label_column_names)
+        has_labels = any(inputs.get(k) is not None for k in self.dataset_manager.label_column_names)
         inputs = self._prepare_inputs(inputs)
 
         with torch.no_grad():

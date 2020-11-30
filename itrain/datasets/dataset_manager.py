@@ -37,7 +37,6 @@ class ColumnConfig:
 
 class DatasetManager(ABC):
     label_column_names = ["labels"]
-    input_label_column_names = ["labels"]
 
     def __init__(
         self,
@@ -52,6 +51,7 @@ class DatasetManager(ABC):
         self.train_split_name = Split.TRAIN
         self.dev_split_name = Split.VALIDATION
         self.test_split_name = Split.TEST
+        self.always_call_metrics = False  # a bit hacky but ensures metrics are computed for qa
 
     @property
     def name(self):

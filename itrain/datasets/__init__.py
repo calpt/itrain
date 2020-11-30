@@ -13,7 +13,7 @@ from .dataset_manager import (
     SuperGlueManager,
 )
 from .multiple_choice import ARTManager, HellaswagManager, QuailManager, RaceManager
-from .squad import SquadV1Manager, SquadV2Manager
+from .qa import SquadV1Manager, SquadV2Manager
 
 
 DATASET_MANAGER_CLASSES = {
