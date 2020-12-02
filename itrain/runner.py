@@ -542,7 +542,7 @@ class Runner:
             logits = logits[0]
 
         if has_labels:
-            labels = tuple(inputs.get(name).detach() for name in self.dataset_manager.input_label_column_names)
+            labels = tuple(inputs.get(name).detach() for name in self.dataset_manager.label_column_names)
             if len(labels) == 1:
                 labels = labels[0]
         else:

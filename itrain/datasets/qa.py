@@ -8,8 +8,9 @@ from datasets import DownloadConfig, DownloadManager, load_metric
 from filelock import FileLock
 from transformers import PreTrainedTokenizerBase, SquadDataset, SquadDataTrainingArguments
 from transformers.data.datasets.squad import Split as SquadSplit
-from transformers.data.metrics.squad_metrics import compute_predictions_logits
+from transformers.data.metrics.squad_metrics import compute_predictions_logits, squad_evaluate
 from transformers.data.processors.squad import (
+    SquadExample,
     SquadResult,
     SquadV1Processor,
     SquadV2Processor,
@@ -65,7 +66,30 @@ class SquadLikeDataset(SquadDataset):
                 if mode == SquadSplit.dev:
                     self.examples = self.processor.get_dev_examples(args.data_dir, filename=data_file)
                 else:
-                    self.examples = self.processor.get_train_examples(args.data_dir, filename=data_file)
+                    # ugly hack: always use the dev_examples method and patch answers afterwards
+                    self.examples = self.processor.get_dev_examples(args.data_dir, filename=data_file)
+                    removed = 0
+                    example: SquadExample
+                    for example in self.examples:
+                        example.is_valid = True
+                        if not example.is_impossible:
+                            if len(example.answers) > 0:
+                                answer = example.answers[0]
+                                example.answer_text = answer["text"]
+                                example.start_position_character = answer["answer_start"]
+                                # set start and end position
+                                example.start_position = example.char_to_word_offset[answer["answer_start"]]
+                                example.end_position = example.char_to_word_offset[
+                                    min(example.start_position_character + len(example.answer_text) - 1, len(example.char_to_word_offset) - 1)
+                                ]
+                            else:
+                                removed += 1
+                                example.is_valid = False
+                    if removed > 0:
+                        logger.warn(
+                            f"Removed {removed} samples from training because of missing answers."
+                        )
+                        self.examples = [example for example in self.examples if example.is_valid]
 
                 self.features = squad_convert_examples_to_features(
                     examples=self.examples,
@@ -87,11 +111,11 @@ class SquadLikeDataset(SquadDataset):
                 )
 
 
-class SquadV1Manager(DatasetManager):
+class QADatasetManager(DatasetManager):
     label_column_names = ["start_positions", "end_positions"]
     with_negative = False
-    train_file_name = "SQuAD1-1_train.json.gz"
-    dev_file_name = "SQuAD1-1_dev.json.gz"
+    train_file_name = None
+    dev_file_name = None
 
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer=tokenizer)
@@ -141,11 +165,6 @@ class SquadV1Manager(DatasetManager):
                 data_file=os.path.basename(dl_dev_file),
             ),
         }
-        # load metric
-        if self.with_negative:
-            self.metric = load_metric("squad_v2")
-        else:
-            self.metric = load_metric("squad")
 
     def _get_squad_results(self, predictions):
         for start_logits, end_logits, features in zip(predictions[0], predictions[1], self.dev_split.features):
@@ -159,7 +178,7 @@ class SquadV1Manager(DatasetManager):
             squad_results,
             n_best_size=self.squad_args.n_best_size,
             max_answer_length=self.squad_args.max_answer_length,
-            do_lower_case=False,  # TODO
+            do_lower_case=hasattr(self.tokenizer, "do_lower_case") and self.tokenizer.do_lower_case,
             output_prediction_file=None,
             output_nbest_file=None,
             output_null_log_odds_file=None,
@@ -168,10 +187,8 @@ class SquadV1Manager(DatasetManager):
             null_score_diff_threshold=self.squad_args.null_score_diff_threshold,
             tokenizer=self.tokenizer,
         )
-        predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
-        references = [{"id": ex.qas_id, "answers": ex.answers} for ex in self.dev_split.examples]
-        scores = self.metric.compute(predictions=predictions, references=references)
-        return {"em": scores["exact_match"] / 100.0, "f1": scores["f1"] / 100.0}
+        results = squad_evaluate(self.dev_split.examples, predictions)
+        return results
 
     def get_prediction_head_config(self):
         return {
@@ -182,7 +199,69 @@ class SquadV1Manager(DatasetManager):
         }
 
 
+class SquadV1Manager(QADatasetManager):
+    with_negative = False
+    train_file_name = "SQuAD1-1_train.json.gz"
+    dev_file_name = "SQuAD1-1_dev.json.gz"
+
+
 class SquadV2Manager(SquadV1Manager):
     with_negative = True
     train_file_name = "SQuAD2-0_train.json.gz"
     dev_file_name = "SQuAD2-0_dev.json.gz"
+
+
+class DROPManager(QADatasetManager):
+    train_file_name = "DROP_train.json.gz"
+    dev_file_name = "DROP_dev.json.gz"
+
+
+class WikiHopManager(QADatasetManager):
+    train_file_name = "WikiHop_train.json.gz"
+    dev_file_name = "WikiHop_dev.json.gz"
+
+
+class HotpotQAManager(QADatasetManager):
+    train_file_name = "HotpotQA_train.json.gz"
+    dev_file_name = "HotpotQA_dev.json.gz"
+
+
+class TriviaQAManager(QADatasetManager):
+    train_file_name = "TriviaQA_wiki_train.json.gz"
+    dev_file_name = "TriviaQA_wiki_dev.json.gz"
+
+
+class ComQAManager(QADatasetManager):
+    train_file_name = "ComQA_train.json.gz"
+    dev_file_name = "ComQA_dev.json.gz"
+
+
+class CQManager(QADatasetManager):
+    train_file_name = "ComplexQuestions_train.json.gz"
+    dev_file_name = "ComplexQuestions_dev.json.gz"
+
+
+class CWQManager(QADatasetManager):
+    train_file_name = "ComplexWebQuestions_train.json.gz"
+    dev_file_name = "ComplexWebQuestions_dev.json.gz"
+
+
+class NewsQAManager(QADatasetManager):
+    train_file_name = "NewsQA_train.json.gz"
+    dev_file_name = "NewsQA_dev.json.gz"
+
+
+class SearchQAManager(QADatasetManager):
+    train_file_name = "SearchQA_train.json.gz"
+    dev_file_name = "SearchQA_dev.json.gz"
+
+
+class DuoRCParaphraseManager(QADatasetManager):
+    train_file_name = "DuoRC_Paraphrase_train.json.gz"
+    dev_file_name = "DuoRC_Paraphrase_dev.json.gz"
+
+
+class DuoRCSelfManager(QADatasetManager):
+    with_negative = True
+    train_file_name = "DuoRC_Self_train.json.gz"
+    dev_file_name = "DuoRC_Self_dev.json.gz"

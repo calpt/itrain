@@ -13,7 +13,21 @@ from .dataset_manager import (
     SuperGlueManager,
 )
 from .multiple_choice import ARTManager, HellaswagManager, QuailManager, RaceManager
-from .qa import SquadV1Manager, SquadV2Manager
+from .qa import (
+    ComQAManager,
+    CQManager,
+    CWQManager,
+    DROPManager,
+    DuoRCParaphraseManager,
+    DuoRCSelfManager,
+    HotpotQAManager,
+    NewsQAManager,
+    SearchQAManager,
+    SquadV1Manager,
+    SquadV2Manager,
+    TriviaQAManager,
+    WikiHopManager,
+)
 
 
 DATASET_MANAGER_CLASSES = {
@@ -31,5 +45,16 @@ DATASET_MANAGER_CLASSES = {
     "quail": QuailManager,
     "art": ARTManager,
     "squad": SquadV1Manager,
-    "squad_v2": SquadV2Manager
+    "squad_v2": SquadV2Manager,
+    "drop": DROPManager,
+    "wikihop": WikiHopManager,
+    "hotpotqa": HotpotQAManager,
+    "triviaqa": TriviaQAManager,
+    "comqa": ComQAManager,
+    "cq": CQManager,
+    "cwq": CWQManager,
+    "newsqa": NewsQAManager,
+    "searchqa": SearchQAManager,
+    "duorc_p": DuoRCParaphraseManager,
+    "duorc_s": DuoRCSelfManager,
 }
