@@ -6,14 +6,11 @@ from .arguments import DatasetArguments, ModelArguments, RunArguments
 from .datasets import (
     DATASET_MANAGER_CLASSES,
     CacheMode,
+    ClassificationDatasetManager,
     DatasetManager,
-    GlueManager,
-    HellaswagManager,
-    RaceManager,
-    SquadV1Manager,
-    SquadV2Manager,
-    SuperGlueManager,
+    MultipleChoiceDatasetManager,
+    QADatasetManager,
 )
 from .itrain import Setup
-from .notifier import NOTIFIER_CLASSES, Notifier, TelegramNotifier
+from .notifier import NOTIFIER_CLASSES, EmailNotifier, Notifier, TelegramNotifier
 from .runner import Runner, set_seed

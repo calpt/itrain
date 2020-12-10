@@ -1,18 +1,16 @@
 # flake8: noqa
 
-from .dataset_manager import (
+from .classification import (
     ANLIManager,
-    CacheMode,
-    ColumnConfig,
-    DatasetManager,
-    DatasetManagerBase,
+    ClassificationDatasetManager,
     EmotionDatasetManager,
     GlueManager,
-    SimpleClassificationManager,
+    SciTailManager,
     SNLIManager,
     SuperGlueManager,
 )
-from .multiple_choice import ARTManager, HellaswagManager, QuailManager, RaceManager
+from .dataset_manager import CacheMode, ColumnConfig, DatasetManager, DatasetManagerBase
+from .multiple_choice import ARTManager, HellaswagManager, MultipleChoiceDatasetManager, QuailManager, RaceManager
 from .qa import (
     ComQAManager,
     CQManager,
@@ -22,6 +20,7 @@ from .qa import (
     DuoRCSelfManager,
     HotpotQAManager,
     NewsQAManager,
+    QADatasetManager,
     SearchQAManager,
     SquadV1Manager,
     SquadV2Manager,
@@ -31,11 +30,12 @@ from .qa import (
 
 
 DATASET_MANAGER_CLASSES = {
-    "imdb": SimpleClassificationManager,
-    "rotten_tomatoes": SimpleClassificationManager,
-    "emo": SimpleClassificationManager,
-    "yelp_polarity": SimpleClassificationManager,
+    "imdb": ClassificationDatasetManager,
+    "rotten_tomatoes": ClassificationDatasetManager,
+    "emo": ClassificationDatasetManager,
+    "yelp_polarity": ClassificationDatasetManager,
     "snli": SNLIManager,
+    "scitail": SciTailManager,
     "anli": ANLIManager,
     "emotion": EmotionDatasetManager,
     "glue": GlueManager,

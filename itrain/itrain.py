@@ -175,12 +175,16 @@ def main():
     parser = argparse.ArgumentParser(description="Simple tool to setup Transformers training runs.")
     parser.add_argument("config", type=str, help="Path to the json file containing the full training setup.")
     parser.add_argument("--id", type=int, default=0, help="ID of this run.")
+    parser.add_argument("--preprocess_only", action="store_true", help="Only run dataset preprocessing.")
     args = parser.parse_args()
 
     # Load and run
     setup = Setup(id=args.id)
     setup.load_from_file(args.config)
-    setup.run()
+    if args.preprocess_only:
+        setup.dataset_manager.load()
+    else:
+        setup.run()
 
 
 if __name__ == "__main__":
