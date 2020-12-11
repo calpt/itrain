@@ -1,7 +1,7 @@
 import dataclasses
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import torch
 
@@ -56,6 +56,14 @@ class ModelArguments:
     adapter_config: Optional[str] = field(
         default="pfeiffer",
         metadata={"help": "Adapter configuration. Either an identifier or a path to a file."},
+    )
+    load_adapters: Optional[List[str]] = field(
+        default=None,
+        metadata={"help": "List of pre-trained adapters to be loaded."},
+    )
+    train_adapter_fusion: Optional[str] = field(
+        default=None,
+        metadata={"help": "Train AdapterFusion between the specified adapters instead of the full model."},
     )
 
 

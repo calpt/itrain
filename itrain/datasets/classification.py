@@ -73,6 +73,15 @@ class SNLIManager(ClassificationDatasetManager):
         self.column_config = ColumnConfig(["premise", "hypothesis"], "label")
 
 
+class WikiQAManager(ClassificationDatasetManager):
+    tasks_num_labels = {
+        "wiki_qa": 2,
+    }
+
+    def _configure(self):
+        self.column_config = ColumnConfig(["question", "answer"], "label")
+
+
 class SciTailManager(ClassificationDatasetManager):
     tasks_num_labels = {
         "scitail": 2,

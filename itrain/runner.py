@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm, trange
 from transformers import AdamW, PreTrainedModel, get_linear_schedule_with_warmup
-from transformers.adapter_modeling import get_fusion_regularization_loss
 from transformers.trainer_pt_utils import nested_concat, nested_numpify
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput
 
@@ -232,7 +231,7 @@ class Runner:
                         hasattr(self.model.config, "adapter_fusion")
                         and self.model.config.adapter_fusion["regularization"]
                     ):
-                        fusion_reg_loss = get_fusion_regularization_loss(self.model)
+                        fusion_reg_loss = self.model.base_model.get_fusion_regularization_loss()
                         fusion_reg_loss.backward()
 
                     torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
@@ -376,6 +375,9 @@ class Runner:
             self.model.save_all_adapters(output_dir)
         if self.do_save_adapter_fusion:
             self.model.save_all_adapter_fusions(output_dir)
+            # HACK: also save the head
+            for head in self.model.heads:
+                self.model.save_head(os.path.join(output_dir, head), head_name=head)
         if self.do_save_full_model:
             self.model.save_pretrained(output_dir)
 

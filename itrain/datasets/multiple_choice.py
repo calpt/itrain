@@ -74,6 +74,25 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
         }
 
 
+class SWAGManager(MultipleChoiceDatasetManager):
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer)
+        self._use_task_name_for_loading = False
+        self._default_subset_name = "regular"
+        self.column_config = ColumnConfig(["sent1", "sent2", "ending0", "ending1", "ending2", "ending3"], "label")
+        self.choice_label_map = {v: k for (k, v) in enumerate(range(4))}
+
+    def _build_inputs(self, example):
+        a_s = [example[0] for _ in range(4)]
+        b_s = [
+            example[1] + " " + example[2],
+            example[1] + " " + example[3],
+            example[1] + " " + example[4],
+            example[1] + " " + example[5],
+        ]
+        return a_s, b_s
+
+
 class HellaswagManager(MultipleChoiceDatasetManager):
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer)

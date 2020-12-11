@@ -31,6 +31,11 @@ class Setup:
         self._do_eval = False
         self._eval_run_args = None
         self._notifiers = {}
+        self._config_name = None
+
+    @property
+    def name(self):
+        return self._config_name or self.dataset_manager.name
 
     def dataset(self, args_or_manager: Union[DatasetArguments, DatasetManager]):
         if self.dataset_manager is not None:
@@ -73,15 +78,16 @@ class Setup:
                 self.evaluation()
         if "notify" in config:
             self.notify(config["notify"])
+        self._config_name = os.path.splitext(os.path.basename(file))[0]
 
     def _auto_fill_dirs(self, args: RunArguments):
         if not args.output_dir:
             args.output_dir = os.path.join(
-                "run_output", self.model_instance.config.model_type, self.dataset_manager.name, str(self.id)
+                "run_output", self.model_instance.config.model_type, self.name, str(self.id)
             )
         if not args.logging_dir:
             args.logging_dir = os.path.join(
-                "run_logs", "_".join([str(self.id), self.model_instance.config.model_type, self.dataset_manager.name])
+                "run_logs", "_".join([str(self.id), self.model_instance.config.model_type, self.name])
             )
 
     def run(self):
@@ -95,8 +101,8 @@ class Setup:
         name = ["#id" + str(self.id)]
         if self.model_instance.model_name:
             name.append(self.model_instance.model_name)
-        if self.dataset_manager.name:
-            name.append(self.dataset_manager.name)
+        if self.name:
+            name.append(self.name)
         for notifier in self._notifiers.values():
             if not notifier.title:
                 notifier.title = ", ".join(name)
@@ -108,8 +114,9 @@ class Setup:
                 self.model_instance,
                 self._train_run_args,
                 self.dataset_manager,
-                do_save_full_model=not self.model_args.train_adapter,
+                do_save_full_model=not self.model_args.train_adapter and self.model_args.train_adapter_fusion is None,
                 do_save_adapters=self.model_args.train_adapter,
+                do_save_adapter_fusion=self.model_args.train_adapter_fusion is not None,
             )
             for notifier in self._notifiers.values():
                 notifier.notify_start(message="Training setup:", **self._train_run_args.to_sanitized_dict())
@@ -132,6 +139,14 @@ class Setup:
                     for adapter_name in self.model_instance.config.adapters.adapters:
                         path = os.path.join(best_model_dir, adapter_name)
                         self.model_instance.load_adapter(path)
+                elif self.model_args.train_adapter_fusion is not None:
+                    path = os.path.join(best_model_dir, self.model_args.train_adapter_fusion)
+                    # HACK: adapter-transformers refuses to overwrite existing adapter_fusion config
+                    del self.model_instance.config.adapter_fusion
+                    self.model_instance.load_adapter_fusion(path)
+                    # HACK: also reload the prediction head
+                    head_path = os.path.join(best_model_dir, self.dataset_manager.name)
+                    self.model_instance.load_head(head_path)
                 else:
                     self.model_instance = self.model_instance.from_pretrained(best_model_dir)
                     self.model_instance.active_head = self.dataset_manager.name
@@ -146,20 +161,21 @@ class Setup:
                 self.model_instance,
                 eval_run_args,
                 self.dataset_manager,
-                do_save_full_model=not self.model_args.train_adapter,
+                do_save_full_model=not self.model_args.train_adapter and self.model_args.train_adapter_fusion is None,
                 do_save_adapters=self.model_args.train_adapter,
+                do_save_adapter_fusion=self.model_args.train_adapter_fusion is not None,
             )
             try:
                 results = runner.evaluate(log=False)
                 output_eval_file = os.path.join(
-                    eval_run_args.output_dir, f"eval_results_{self.dataset_manager.name}.txt"
+                    eval_run_args.output_dir, f"eval_results_{self.name}.txt"
                 )
             except Exception as ex:
                 for notifier in self._notifiers.values():
                     notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
                 raise ex
             with open(output_eval_file, "w") as f:
-                logger.info("***** Eval results {} *****".format(self.dataset_manager.name))
+                logger.info("***** Eval results {} *****".format(self.name))
                 for key, value in results.items():
                     logger.info("  %s = %s", key, value)
                     f.write("%s = %s\n" % (key, value))

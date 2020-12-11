@@ -8,9 +8,17 @@ from .classification import (
     SciTailManager,
     SNLIManager,
     SuperGlueManager,
+    WikiQAManager,
 )
 from .dataset_manager import CacheMode, ColumnConfig, DatasetManager, DatasetManagerBase
-from .multiple_choice import ARTManager, HellaswagManager, MultipleChoiceDatasetManager, QuailManager, RaceManager
+from .multiple_choice import (
+    ARTManager,
+    HellaswagManager,
+    MultipleChoiceDatasetManager,
+    QuailManager,
+    RaceManager,
+    SWAGManager,
+)
 from .qa import (
     ComQAManager,
     CQManager,
@@ -35,12 +43,14 @@ DATASET_MANAGER_CLASSES = {
     "emo": ClassificationDatasetManager,
     "yelp_polarity": ClassificationDatasetManager,
     "snli": SNLIManager,
+    "wiki_qa": WikiQAManager,
     "scitail": SciTailManager,
     "anli": ANLIManager,
     "emotion": EmotionDatasetManager,
     "glue": GlueManager,
     "super_glue": SuperGlueManager,
     "hellaswag": HellaswagManager,
+    "swag": SWAGManager,
     "race": RaceManager,
     "quail": QuailManager,
     "art": ARTManager,

@@ -65,17 +65,27 @@ class SquadLikeDataset(SquadDataset):
             else:
                 if mode == SquadSplit.dev:
                     self.examples = self.processor.get_dev_examples(args.data_dir, filename=data_file)
+                    for example in self.examples:
+                        # lower-case all examples
+                        example.doc_tokens = [token.lower() for token in example.doc_tokens]
+                        example.question_text = example.question_text.lower()
+                        example.context_text = example.context_text.lower()
                 else:
                     # ugly hack: always use the dev_examples method and patch answers afterwards
                     self.examples = self.processor.get_dev_examples(args.data_dir, filename=data_file)
                     removed = 0
                     example: SquadExample
                     for example in self.examples:
+                        # lower-case all examples
+                        example.doc_tokens = [token.lower() for token in example.doc_tokens]
+                        example.question_text = example.question_text.lower()
+                        example.context_text = example.context_text.lower()
+                        # discard question if it has no answers and is not marked unanswerable
                         example.is_valid = True
                         if not example.is_impossible:
                             if len(example.answers) > 0:
                                 answer = example.answers[0]
-                                example.answer_text = answer["text"]
+                                example.answer_text = answer["text"].lower()
                                 example.start_position_character = answer["answer_start"]
                                 # set start and end position
                                 example.start_position = example.char_to_word_offset[answer["answer_start"]]
@@ -100,6 +110,15 @@ class SquadLikeDataset(SquadDataset):
                     is_training=mode == SquadSplit.train,
                     threads=args.threads,
                 )
+
+                # free some space
+                if mode == SquadSplit.dev:
+                    for example in self.examples:
+                        example.question_text = None
+                        example.context_text = None
+                        example.title = None
+                else:
+                    self.examples = None
 
                 start = time.time()
                 torch.save(
@@ -133,6 +152,7 @@ class QADatasetManager(DatasetManager):
         self.squad_args.data_dir = data_dir
         self.squad_args.version_2_with_negative = self.with_negative
         self.squad_args.overwrite_cache = overwrite_cache
+        self.squad_args.threads = 4
 
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # download & extract dataset
@@ -257,6 +277,7 @@ class SearchQAManager(QADatasetManager):
 
 
 class DuoRCParaphraseManager(QADatasetManager):
+    with_negative = True
     train_file_name = "DuoRC_Paraphrase_train.json.gz"
     dev_file_name = "DuoRC_Paraphrase_dev.json.gz"
 
