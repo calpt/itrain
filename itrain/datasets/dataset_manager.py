@@ -89,7 +89,6 @@ class DatasetManager(ABC):
 
 
 class DatasetManagerBase(DatasetManager):
-
     def __init__(
         self,
         args: DatasetArguments,
@@ -117,7 +116,14 @@ class DatasetManagerBase(DatasetManager):
         )
         # filter
         self.dataset[self.train_split_name] = self.dataset[self.train_split_name].filter(self._custom_filter)
-        self.dataset[self.dev_split_name] = self.dataset[self.dev_split_name].filter(self._custom_filter)
+        if self.dev_split_name in self.dataset:
+            self.dataset[self.dev_split_name] = self.dataset[self.dev_split_name].filter(self._custom_filter)
+        if (
+            self.dataset.num_rows[self.train_split_name] == 0
+            or self.dev_split_name in self.dataset
+            and self.dataset.num_rows[self.dev_split_name] == 0
+        ):
+            raise ValueError("No examples left in at least one split of the dataset after filtering.")
         # convert examples to transformers features
         self._encode(load_from_cache=cache_mode >= CacheMode.USE_DATASET_USE_FEATURES)
         # load metric

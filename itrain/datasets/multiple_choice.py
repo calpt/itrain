@@ -15,7 +15,14 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
         super().__init__(args, tokenizer, load_metric=False)
 
     def _custom_filter(self, example):
-        return example[self.column_config.label] in self.choice_label_map and all(
+        if self.column_config.label:
+            label = example[self.column_config.label]
+            if isinstance(label, str):
+                label = label.strip(" \n")
+            valid_label = label in self.choice_label_map
+        else:
+            valid_label = True
+        return valid_label and all(
             [example[col] is not None for col in self.column_config.inputs]
         )
 
@@ -52,10 +59,15 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
                 token_type_ids.append(encoded["token_type_ids"])
             if "attention_mask" in encoded:
                 attention_mask.append(encoded["attention_mask"])
+        labels = []
+        for label in examples[self.column_config.label]:
+            if isinstance(label, str):
+                label = label.strip(" \n")
+            labels.append(self.choice_label_map.get(label, None))
         encoded = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "labels": [self.choice_label_map.get(label, None) for label in examples[self.column_config.label]],
+            "labels": labels,
         }
         if len(token_type_ids) > 0:
             encoded["token_type_ids"] = token_type_ids
@@ -80,6 +92,23 @@ class SWAGManager(MultipleChoiceDatasetManager):
         self._use_task_name_for_loading = False
         self._default_subset_name = "regular"
         self.column_config = ColumnConfig(["sent1", "sent2", "ending0", "ending1", "ending2", "ending3"], "label")
+        self.choice_label_map = {v: k for (k, v) in enumerate(range(4))}
+
+    def _build_inputs(self, example):
+        a_s = [example[0] for _ in range(4)]
+        b_s = [
+            example[1] + " " + example[2],
+            example[1] + " " + example[3],
+            example[1] + " " + example[4],
+            example[1] + " " + example[5],
+        ]
+        return a_s, b_s
+
+
+class CosmosQAManager(MultipleChoiceDatasetManager):
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer)
+        self.column_config = ColumnConfig(["context", "question", "answer0", "answer1", "answer2", "answer3"], "label")
         self.choice_label_map = {v: k for (k, v) in enumerate(range(4))}
 
     def _build_inputs(self, example):
@@ -124,3 +153,63 @@ class ARTManager(MultipleChoiceDatasetManager):
         a_s = [example[0] + " " + example[2], example[0] + " " + example[3]]
         b_s = [example[1] for _ in range(2)]
         return a_s, b_s
+
+
+class SocialIQAManager(MultipleChoiceDatasetManager):
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer)
+        self.column_config = ColumnConfig(["context", "question", "answerA", "answerB", "answerC"], "label")
+        self.choice_label_map = {v: k for (k, v) in enumerate(["1", "2", "3"])}
+
+    def _build_inputs(self, example):
+        a_s = [example[0] for _ in range(3)]
+        b_s = [
+            example[1] + " " + example[2],
+            example[1] + " " + example[3],
+            example[1] + " " + example[4],
+        ]
+        return a_s, b_s
+
+
+class CommonsenseQAManager(MultipleChoiceDatasetManager):
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer=tokenizer)
+        self.column_config = ColumnConfig(["question", "choices"], "answerKey")
+        self.choice_label_map = {v: k for (k, v) in enumerate(["A", "B", "C", "D", "E"])}
+
+    def _build_inputs(self, example):
+        question, choices = example
+        a_s = [question for _ in range(len(self.choice_label_map))]
+        b_s = [choices["text"][i] for i in range(len(self.choice_label_map))]
+        return a_s, b_s
+
+
+class QuartzManager(MultipleChoiceDatasetManager):
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer=tokenizer)
+        self.column_config = ColumnConfig(["para", "question", "choices"], "answerKey")
+        self.choice_label_map = {v: k for (k, v) in enumerate(["A", "B"])}
+
+    def _build_input_choice(self, question, ending):
+        if "_____" in question:
+            return question.replace("_____", ending)
+        else:
+            return question + " " + ending
+
+    def _build_inputs(self, example):
+        para, question, choices = example
+        a_s = [para for _ in range(len(self.choice_label_map))]
+        b_s = [self._build_input_choice(question, choices["text"][i]) for i in range(len(self.choice_label_map))]
+        return a_s, b_s
+
+
+class WinograndeManager(MultipleChoiceDatasetManager):
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer)
+        self.column_config = ColumnConfig(["sentence", "option1", "option2"], "answer")
+        self.choice_label_map = {v: k for (k, v) in enumerate(["1", "2"])}
+
+    def _build_inputs(self, example):
+        sentence, opt1, opt2 = example
+        a_s = [self._build_input_choice(sentence, opt) for opt in [opt1, opt2]]
+        return a_s, None

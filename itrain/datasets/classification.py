@@ -16,6 +16,10 @@ class ClassificationDatasetManager(DatasetManagerBase):
         "rotten_tomatoes": 2,
         "emo": 4,
         "yelp_polarity": 2,
+        "scicite": 3,
+        "snli": 3,
+        "trec": 6,
+        "eraser_multi_rc": 2,
     }
 
     def __init__(
@@ -28,7 +32,16 @@ class ClassificationDatasetManager(DatasetManagerBase):
         self._configure()
 
     def _configure(self):
-        self.column_config = ColumnConfig(["text"], "label")
+        if self.args.dataset_name == "scicite":
+            self.column_config = ColumnConfig(["string"], "label")
+        elif self.args.dataset_name == "trec":
+            self.column_config = ColumnConfig(["text"], "label-coarse")
+        elif self.args.dataset_name == "snli":
+            self.column_config = ColumnConfig(["premise", "hypothesis"], "label")
+        elif self.args.dataset_name == "eraser_multi_rc":
+            self.column_config = ColumnConfig(["passage", "query_and_answer"], "label")
+        else:
+            self.column_config = ColumnConfig(["text"], "label")
 
     def _map_labels(self, examples):
         return examples[self.column_config.label]
@@ -62,15 +75,6 @@ class ClassificationDatasetManager(DatasetManagerBase):
             "layers": 2,
             "activation_function": "tanh",
         }
-
-
-class SNLIManager(ClassificationDatasetManager):
-    tasks_num_labels = {
-        "snli": 3
-    }
-
-    def _configure(self):
-        self.column_config = ColumnConfig(["premise", "hypothesis"], "label")
 
 
 class WikiQAManager(ClassificationDatasetManager):
