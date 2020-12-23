@@ -6,7 +6,8 @@ from typing import Optional, Union
 from transformers import PreTrainedModel
 
 from .arguments import DatasetArguments, ModelArguments, RunArguments
-from .datasets import DATASET_MANAGER_CLASSES, DatasetManager
+from .datasets import DATASET_MANAGER_CLASSES, CacheMode, DatasetManager
+from .datasets.tagging import TaggingDatasetManager
 from .model_creator import create_model, create_tokenizer
 from .notifier import NOTIFIER_CLASSES
 from .runner import Runner, set_seed
@@ -51,7 +52,11 @@ class Setup:
         if not self.dataset_manager:
             raise ValueError("Set dataset before creating model.")
         self.model_args = args
-        self.dataset_manager.tokenizer = create_tokenizer(args)
+        # HACK: when using e.g. Roberta with sequence tagging, we need to set add_prefix_space
+        kwargs = {}
+        if isinstance(self.dataset_manager, TaggingDatasetManager):
+            kwargs["add_prefix_space"] = True
+        self.dataset_manager.tokenizer = create_tokenizer(args, **kwargs)
         self.model_instance = create_model(args, self.dataset_manager)
 
     def training(self, args: RunArguments):
@@ -96,7 +101,7 @@ class Setup:
         else:
             set_seed(self._eval_run_args.seed)
         # Load dataset
-        self.dataset_manager.load()
+        self.dataset_manager.load_and_preprocess()
         # Init notifier
         name = ["#id" + str(self.id)]
         if self.model_instance.model_name:
@@ -191,14 +196,14 @@ def main():
     parser = argparse.ArgumentParser(description="Simple tool to setup Transformers training runs.")
     parser.add_argument("config", type=str, help="Path to the json file containing the full training setup.")
     parser.add_argument("--id", type=int, default=0, help="ID of this run.")
-    parser.add_argument("--preprocess_only", action="store_true", help="Only run dataset preprocessing.")
+    parser.add_argument("--preprocess_only", action="store_true", default=False, help="Only run dataset preprocessing.")
     args = parser.parse_args()
 
     # Load and run
     setup = Setup(id=args.id)
     setup.load_from_file(args.config)
     if args.preprocess_only:
-        setup.dataset_manager.load()
+        setup.dataset_manager.load_and_preprocess(CacheMode.USE_DATASET_NEW_FEATURES)
     else:
         setup.run()
 

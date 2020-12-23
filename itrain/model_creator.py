@@ -4,10 +4,11 @@ from .arguments import ModelArguments
 from .datasets import DatasetManager
 
 
-def create_tokenizer(args: ModelArguments):
+def create_tokenizer(args: ModelArguments, **kwargs):
     return AutoTokenizer.from_pretrained(
         args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
         use_fast=args.use_fast_tokenizer,
+        **kwargs
     )
 
 

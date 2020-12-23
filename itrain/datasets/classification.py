@@ -277,12 +277,12 @@ class SuperGlueManager(DatasetManagerBase):
         ):
             for entity in entities:
                 label = 1 if entity in answers else 0
-                query = query.replace("@placeholder", entity)
+                query_filled = query.replace("@placeholder", entity)
                 example_encoded = self.tokenizer(
                     passage,
-                    query,
+                    query_filled,
                     max_length=self.args.max_seq_length,
-                    truncation=True,
+                    truncation=self._truncation,
                     padding=self._padding,
                     return_overflowing_tokens=True,
                 )
@@ -290,7 +290,7 @@ class SuperGlueManager(DatasetManagerBase):
                 #     logger.info("Cropping {0} tokens of input.".format(len(example_encoded["overflowing_tokens"])))
                 encoded["idx"].append(idx)
                 encoded["passage"].append(passage)
-                encoded["query"].append(query)
+                encoded["query"].append(query_filled)
                 encoded["entities"].append(entity)
                 encoded["answers"].append(answers)
                 encoded["input_ids"].append(example_encoded["input_ids"])

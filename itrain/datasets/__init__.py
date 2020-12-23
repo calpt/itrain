@@ -39,6 +39,7 @@ from .qa import (
     TriviaQAManager,
     WikiHopManager,
 )
+from .tagging import TaggingDatasetManager
 
 
 DATASET_MANAGER_CLASSES = {
@@ -79,4 +80,7 @@ DATASET_MANAGER_CLASSES = {
     "searchqa": SearchQAManager,
     "duorc_p": DuoRCParaphraseManager,
     "duorc_s": DuoRCSelfManager,
+    "conll2000": TaggingDatasetManager,
+    "conll2003": TaggingDatasetManager,
+    "universal_dependencies": TaggingDatasetManager,
 }

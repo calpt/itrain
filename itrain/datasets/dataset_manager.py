@@ -64,6 +64,14 @@ class DatasetManager(ABC):
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         pass
 
+    @abstractmethod
+    def preprocess(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
+        pass
+
+    def load_and_preprocess(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
+        self.load(cache_mode)
+        self.preprocess(cache_mode)
+
     def collate_fn(self, features):
         return default_data_collator(features)
 
@@ -114,6 +122,14 @@ class DatasetManagerBase(DatasetManager):
             self.args.task_name if self._use_task_name_for_loading else self._default_subset_name,
             download_mode=download_mode,
         )
+        # load metric
+        if self.load_metric:
+            if inspect.isclass(self.load_metric) and issubclass(self.load_metric, Metric):
+                self.metric = self.load_metric(self.args.task_name)
+            else:
+                self.metric = load_metric(self.args.dataset_name, self.args.task_name)
+
+    def preprocess(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # filter
         self.dataset[self.train_split_name] = self.dataset[self.train_split_name].filter(self._custom_filter)
         if self.dev_split_name in self.dataset:
@@ -126,12 +142,6 @@ class DatasetManagerBase(DatasetManager):
             raise ValueError("No examples left in at least one split of the dataset after filtering.")
         # convert examples to transformers features
         self._encode(load_from_cache=cache_mode >= CacheMode.USE_DATASET_USE_FEATURES)
-        # load metric
-        if self.load_metric:
-            if inspect.isclass(self.load_metric) and issubclass(self.load_metric, Metric):
-                self.metric = self.load_metric(self.args.task_name)
-            else:
-                self.metric = load_metric(self.args.dataset_name, self.args.task_name)
 
     def _custom_filter(self, example):
         return True  # Override for custom filtering

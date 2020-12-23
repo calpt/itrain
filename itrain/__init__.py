@@ -10,6 +10,7 @@ from .datasets import (
     DatasetManager,
     MultipleChoiceDatasetManager,
     QADatasetManager,
+    TaggingDatasetManager,
 )
 from .itrain import Setup
 from .notifier import NOTIFIER_CLASSES, EmailNotifier, Notifier, TelegramNotifier

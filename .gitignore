@@ -6,3 +6,4 @@ run_output
 run_logs
 *.sh
 samples
+/datasets

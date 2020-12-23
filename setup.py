@@ -15,6 +15,7 @@ setup(
     install_requires=[
         "adapter-transformers",
         "datasets",
+        "seqeval",
         "sklearn",
         "tgsend >= 0.3",
         "torch",

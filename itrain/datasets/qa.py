@@ -1,12 +1,13 @@
 import logging
 import os
 import time
-from dataclasses import asdict
 
 import torch
 from datasets import DownloadConfig, DownloadManager, load_metric
 from filelock import FileLock
-from transformers import PreTrainedTokenizerBase, SquadDataset, SquadDataTrainingArguments
+from tokenizers.normalizers import Lowercase
+from tqdm import tqdm
+from transformers import PreTrainedTokenizerBase, SquadDataset, SquadDataTrainingArguments, is_torch_available
 from transformers.data.datasets.squad import Split as SquadSplit
 from transformers.data.metrics.squad_metrics import compute_predictions_logits, squad_evaluate
 from transformers.data.processors.squad import (
@@ -14,7 +15,9 @@ from transformers.data.processors.squad import (
     SquadResult,
     SquadV1Processor,
     SquadV2Processor,
-    squad_convert_examples_to_features,
+    squad_convert_example_to_features,
+    squad_convert_example_to_features_init,
+    whitespace_tokenize,
 )
 
 from ..arguments import DatasetArguments
@@ -39,6 +42,7 @@ class SquadLikeDataset(SquadDataset):
         cached_features_file: str,
         mode: str = "train",
         data_file: str = None,
+        do_lower_case=True,
     ):
         self.args = args
         self.processor = SquadV2Processor() if args.version_2_with_negative else SquadV1Processor()
@@ -65,40 +69,48 @@ class SquadLikeDataset(SquadDataset):
             else:
                 if mode == SquadSplit.dev:
                     self.examples = self.processor.get_dev_examples(args.data_dir, filename=data_file)
-                    for example in self.examples:
-                        # lower-case all examples
-                        example.doc_tokens = [token.lower() for token in example.doc_tokens]
-                        example.question_text = example.question_text.lower()
-                        example.context_text = example.context_text.lower()
+                    if do_lower_case:
+                        for example in self.examples:
+                            # lower-case all examples since there's some case mismatch between context and answer
+                            example.doc_tokens = [token.lower() for token in example.doc_tokens]
+                            example.question_text = example.question_text.lower()
+                            example.context_text = example.context_text.lower()
                 else:
                     # ugly hack: always use the dev_examples method and patch answers afterwards
                     self.examples = self.processor.get_dev_examples(args.data_dir, filename=data_file)
                     removed = 0
                     example: SquadExample
                     for example in self.examples:
-                        # lower-case all examples
-                        example.doc_tokens = [token.lower() for token in example.doc_tokens]
-                        example.question_text = example.question_text.lower()
-                        example.context_text = example.context_text.lower()
-                        # discard question if it has no answers and is not marked unanswerable
+                        # lower-case all examples since there's some case mismatch between context and answer
+                        if do_lower_case:
+                            example.doc_tokens = [token.lower() for token in example.doc_tokens]
+                            example.question_text = example.question_text.lower()
+                            example.context_text = example.context_text.lower()
                         example.is_valid = True
                         if not example.is_impossible:
                             if len(example.answers) > 0:
                                 answer = example.answers[0]
-                                example.answer_text = answer["text"].lower()
+                                if do_lower_case:
+                                    example.answer_text = answer["text"].lower()
+                                else:
+                                    example.answer_text = answer["text"]
                                 example.start_position_character = answer["answer_start"]
                                 # set start and end position
                                 example.start_position = example.char_to_word_offset[answer["answer_start"]]
                                 example.end_position = example.char_to_word_offset[
-                                    min(example.start_position_character + len(example.answer_text) - 1, len(example.char_to_word_offset) - 1)
+                                    min(
+                                        example.start_position_character + len(example.answer_text) - 1,
+                                        len(example.char_to_word_offset) - 1,
+                                    )
                                 ]
+                                if not self._fix_answer(example):
+                                    removed += 1
                             else:
+                                # discard question if it has no answers and is not marked unanswerable
                                 removed += 1
                                 example.is_valid = False
                     if removed > 0:
-                        logger.warn(
-                            f"Removed {removed} samples from training because of missing answers."
-                        )
+                        logger.warn(f"Removed {removed} samples from training because of missing answers.")
                         self.examples = [example for example in self.examples if example.is_valid]
 
                 self.features = squad_convert_examples_to_features(
@@ -108,26 +120,108 @@ class SquadLikeDataset(SquadDataset):
                     doc_stride=args.doc_stride,
                     max_query_length=args.max_query_length,
                     is_training=mode == SquadSplit.train,
-                    threads=args.threads,
                 )
 
                 # free some space
                 if mode == SquadSplit.dev:
-                    for example in self.examples:
-                        example.question_text = None
-                        example.context_text = None
-                        example.title = None
+                    pass
+                    # for example in self.examples:
+                    #     del example.question_text
+                    #     del example.context_text
+                    #     del example.title
                 else:
-                    self.examples = None
+                    del self.examples
 
                 start = time.time()
                 torch.save(
-                    {"features": self.features, "examples": self.examples},
+                    {"features": self.features, "examples": getattr(self, "examples", None)},
                     cached_features_file,
                 )
                 logger.info(
                     "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
                 )
+
+    def _fix_answer(self, example):
+        # check if the answer span is actually valid
+        actual_text = " ".join(
+            example.doc_tokens[example.start_position : (example.end_position + 1)]
+        ).lower()
+        cleaned_answer_text = " ".join(whitespace_tokenize(example.answer_text)).lower()
+        if actual_text.find(cleaned_answer_text) == -1:
+            # try if the span is just shifted by one to the left or right
+            actual_text_left = " ".join(
+                example.doc_tokens[(example.start_position - 1) : example.end_position]
+            ).lower()
+            actual_text_right =  " ".join(
+                example.doc_tokens[(example.start_position + 1) : (example.end_position + 2)]
+            ).lower()
+            if actual_text_left.find(cleaned_answer_text) != -1:
+                example.start_position = example.start_position - 1
+                example.end_position = example.end_position - 1
+            elif actual_text_right.find(cleaned_answer_text) != -1:
+                example.start_position = example.start_position + 1
+                example.end_position = example.end_position + 1
+            else:
+                logger.warning(
+                    "Could not find answer: '%s' vs. '%s'", actual_text, cleaned_answer_text
+                )
+                example.is_valid = False
+                return False
+        return True
+
+
+def squad_convert_examples_to_features(
+    examples,
+    tokenizer,
+    max_seq_length,
+    doc_stride,
+    max_query_length,
+    is_training,
+    padding_strategy="max_length",
+    tqdm_enabled=True,
+):
+    squad_convert_example_to_features_init(tokenizer)
+
+    features = []
+    for example in tqdm(
+        examples,
+        total=len(examples),
+        desc="convert squad examples to features",
+        disable=not tqdm_enabled,
+    ):
+        features.append(
+            squad_convert_example_to_features(
+                example,
+                max_seq_length=max_seq_length,
+                doc_stride=doc_stride,
+                max_query_length=max_query_length,
+                padding_strategy=padding_strategy,
+                is_training=is_training,
+            )
+        )
+
+        # free space
+        del example.question_text
+        del example.context_text
+        del example.title
+
+    new_features = []
+    unique_id = 1000000000
+    example_index = 0
+    for example_features in tqdm(
+        features, total=len(features), desc="add example index and unique id", disable=not tqdm_enabled
+    ):
+        if not example_features:
+            continue
+        for example_feature in example_features:
+            example_feature.example_index = example_index
+            example_feature.unique_id = unique_id
+            new_features.append(example_feature)
+            unique_id += 1
+        example_index += 1
+    features = new_features
+    del new_features
+    return features
 
 
 class QADatasetManager(DatasetManager):
@@ -145,14 +239,10 @@ class QADatasetManager(DatasetManager):
     def _create_squad_training_arguments(self, data_dir, overwrite_cache=False):
         # copy fields from DatasetArguments
         self.squad_args = SquadDataTrainingArguments()
-        for k, v in asdict(self.args).items():
-            if hasattr(self.squad_args, k):
-                setattr(self.squad_args, k, v)
-        # set additional options manually
+        self.max_seq_length = self.args.max_seq_length
         self.squad_args.data_dir = data_dir
         self.squad_args.version_2_with_negative = self.with_negative
         self.squad_args.overwrite_cache = overwrite_cache
-        self.squad_args.threads = 4
 
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # download & extract dataset
@@ -162,12 +252,14 @@ class QADatasetManager(DatasetManager):
             force_download=cache_mode == CacheMode.NEW_DATASET_NEW_FEATURES,
         )
         download_manager = DownloadManager(dataset_name=self.args.dataset_name, download_config=download_config)
-        dl_train_file, dl_dev_file = download_manager.download_and_extract(
+        self._dl_train_file, self._dl_dev_file = download_manager.download_and_extract(
             [DOWNLOAD_URL_BASE + name for name in [self.train_file_name, self.dev_file_name]]
         )
+
+    def preprocess(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # create dataset object
         self._create_squad_training_arguments(
-            os.path.dirname(dl_train_file), overwrite_cache=cache_mode < CacheMode.USE_DATASET_USE_FEATURES
+            os.path.dirname(self._dl_train_file), overwrite_cache=cache_mode < CacheMode.USE_DATASET_USE_FEATURES
         )
         self.dataset = {
             self.train_split_name: SquadLikeDataset(
@@ -175,14 +267,14 @@ class QADatasetManager(DatasetManager):
                 tokenizer=self.tokenizer,
                 cached_features_file=self._get_features_cache_file(self.train_split_name),
                 mode="train",
-                data_file=os.path.basename(dl_train_file),
+                data_file=os.path.basename(self._dl_train_file),
             ),
             self.dev_split_name: SquadLikeDataset(
                 self.squad_args,
                 tokenizer=self.tokenizer,
                 cached_features_file=self._get_features_cache_file(self.dev_split_name),
                 mode="dev",
-                data_file=os.path.basename(dl_dev_file),
+                data_file=os.path.basename(self._dl_dev_file),
             ),
         }
 
