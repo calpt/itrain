@@ -179,15 +179,16 @@ class Setup:
                 for notifier in self._notifiers.values():
                     notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
                 raise ex
+            if epoch:
+                results["training_epochs"] = epoch
             with open(output_eval_file, "w") as f:
                 logger.info("***** Eval results {} *****".format(self.name))
                 for key, value in results.items():
                     logger.info("  %s = %s", key, value)
                     f.write("%s = %s\n" % (key, value))
-            if epoch:
-                results["training_epochs"] = epoch
             for notifier in self._notifiers.values():
                 notifier.notify_end(message="Evaluation results:", **results)
+            return results
 
 
 def main():

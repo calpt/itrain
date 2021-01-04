@@ -3,6 +3,7 @@ env
 __pycache__
 *.egg-info
 run_output
+fusion_output
 run_logs
 *.sh
 samples

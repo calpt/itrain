@@ -38,7 +38,10 @@ class DatasetManager(ABC):
         tokenizer: PreTrainedTokenizerBase = None,
     ):
         self.args = args
-        self._dataset_loc = self.args.dataset_dir or self.args.dataset_name
+        if self.args.dataset_dir:
+            self._dataset_loc = os.path.expanduser(self.args.dataset_dir)
+        else:
+            self._dataset_loc = self.args.dataset_name
         self.tokenizer = tokenizer
         self.dataset = {}
         self.metric = None

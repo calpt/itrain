@@ -2,7 +2,7 @@
     "dataset": {
         "dataset_name": "universal_dependencies",
         "task_name": "en_ewt",
-        "dataset_dir": "datasets/universal_dependencies.py"
+        "dataset_dir": "~/itrain/datasets/universal_dependencies.py"
     },
     "model": {
         "model_name_or_path": "roberta-base",
