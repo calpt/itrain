@@ -5,6 +5,7 @@ from transformers import PreTrainedTokenizerBase
 
 from ..arguments import DatasetArguments
 from .dataset_manager import ColumnConfig, DatasetManagerBase
+from .sampler import StratifiedRandomSampler
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,15 @@ logger = logging.getLogger(__name__)
 class MultipleChoiceDatasetManager(DatasetManagerBase):
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer, load_metric=False)
+
+    def train_sampler(self):
+        if self.args.train_subset_size <= 0 or self.args.train_subset_size > len(self.train_split):
+            return super().train_sampler()
+        else:
+            return StratifiedRandomSampler(
+                self.train_split[self.column_config.label],
+                self.args.train_subset_size,
+            )
 
     def _custom_filter(self, example):
         if self.column_config.label:

@@ -4,6 +4,7 @@ import os
 import random
 import re
 import shutil
+import time
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
@@ -25,10 +26,13 @@ logger = logging.getLogger(__name__)
 
 
 def set_seed(seed: int):
+    if seed is None:
+        seed = int((time.time()*1000) % 2**32)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    return seed
 
 
 class TrainingOutput(NamedTuple):
@@ -65,7 +69,7 @@ class Runner:
         self.global_step = None
         self.epoch = None
 
-        set_seed(self.args.seed)
+        # set_seed(self.args.seed)
         os.makedirs(self.args.output_dir, exist_ok=True)
 
     def get_train_dataloader(self) -> DataLoader:
@@ -75,7 +79,7 @@ class Runner:
         data_loader = DataLoader(
             self.dataset_manager.train_split,
             batch_size=self.args.batch_size,
-            shuffle=True,
+            sampler=self.dataset_manager.train_sampler(),
             collate_fn=self.dataset_manager.collate_fn,
         )
 

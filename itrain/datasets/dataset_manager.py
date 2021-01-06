@@ -10,6 +10,7 @@ from transformers import PreTrainedTokenizerBase, default_data_collator
 from transformers.file_utils import torch_cache_home
 
 from ..arguments import DatasetArguments
+from .sampler import RandomSampler
 
 
 DATASET_FEATURES_CACHE = os.path.join(torch_cache_home, "itrain")
@@ -74,6 +75,9 @@ class DatasetManager(ABC):
     def load_and_preprocess(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         self.load(cache_mode)
         self.preprocess(cache_mode)
+
+    def train_sampler(self):
+        return RandomSampler(self.train_split, num_samples=self.args.train_subset_size)
 
     def collate_fn(self, features):
         return default_data_collator(features)

@@ -27,6 +27,13 @@ class DatasetArguments:
             "than this will be truncated, sequences shorter will be padded."
         },
     )
+    train_subset_size: int = field(
+        default=-1,
+        metadata={
+            "help": "Limit the number of training examples."
+            "If the limit is greater than the training set size or < 0, all examples will be used."
+        }
+    )
 
     @property
     def identifier(self):
@@ -118,8 +125,6 @@ class RunArguments:
             )
         },
     )
-
-    seed: int = field(default=42, metadata={"help": "random seed for initialization"})
 
     past_index: int = field(
         default=-1,

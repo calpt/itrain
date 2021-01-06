@@ -8,6 +8,7 @@ from transformers import PreTrainedTokenizerBase
 from ..arguments import DatasetArguments
 from ..ext.super_glue import SuperGlue
 from .dataset_manager import ColumnConfig, DatasetManagerBase
+from .sampler import StratifiedRandomSampler
 
 
 class ClassificationDatasetManager(DatasetManagerBase):
@@ -30,6 +31,15 @@ class ClassificationDatasetManager(DatasetManagerBase):
     ):
         super().__init__(args, tokenizer, load_metric=load_metric)
         self._configure()
+
+    def train_sampler(self):
+        if self.args.train_subset_size <= 0 or self.args.train_subset_size > len(self.train_split):
+            return super().train_sampler()
+        else:
+            return StratifiedRandomSampler(
+                self.train_split[self.column_config.label],
+                self.args.train_subset_size,
+            )
 
     def _configure(self):
         if self.args.dataset_name == "scicite":
@@ -135,7 +145,7 @@ class ANLIManager(ClassificationDatasetManager):
 
 class EmotionDatasetManager(ClassificationDatasetManager):
     tasks_num_labels = {
-        "emotion": 6
+        "emotion": 6,
     }
 
     emotion_label2id = {
@@ -144,7 +154,7 @@ class EmotionDatasetManager(ClassificationDatasetManager):
         "love": 2,
         "anger": 3,
         "fear": 4,
-        "surprise": 5
+        "surprise": 5,
     }
 
     def _map_labels(self, examples):
@@ -171,7 +181,12 @@ class GlueManager(ClassificationDatasetManager):
         super().__init__(args, tokenizer, load_metric=True)
 
     def _configure(self):
-        if self.args.task_name == "mrpc" or self.args.task_name == "rte" or self.args.task_name == "wnli" or self.args.task_name == "stsb":
+        if (
+            self.args.task_name == "mrpc"
+            or self.args.task_name == "rte"
+            or self.args.task_name == "wnli"
+            or self.args.task_name == "stsb"
+        ):
             self.column_config = ColumnConfig(["sentence1", "sentence2"], "label")
         elif self.args.task_name == "sst2":
             self.column_config = ColumnConfig(["sentence"], "label")
@@ -196,7 +211,7 @@ class GlueManager(ClassificationDatasetManager):
         return self.metric.compute(predictions=predictions, references=references)
 
 
-class SuperGlueManager(DatasetManagerBase):
+class SuperGlueManager(ClassificationDatasetManager):
     tasks_num_labels = {
         "boolq": 2,
         "cb": 3,
@@ -217,6 +232,8 @@ class SuperGlueManager(DatasetManagerBase):
 
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer, load_metric=SuperGlue)
+
+    def _configure(self):
         if self.args.task_name == "boolq":
             self.column_config = ColumnConfig(["passage", "question"], "label")
             self._encode_batch = self._encode_batch_classification
@@ -335,11 +352,3 @@ class SuperGlueManager(DatasetManagerBase):
         else:
             predictions = np.argmax(predictions, axis=1)
         return self.metric.compute(predictions=predictions, references=references)
-
-    def get_prediction_head_config(self):
-        return {
-            "head_type": "classification",
-            "num_labels": self.tasks_num_labels[self.args.task_name],
-            "layers": 2,
-            "activation_function": "tanh",
-        }
