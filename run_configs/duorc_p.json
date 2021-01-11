@@ -1,6 +1,6 @@
 {
     "dataset": {
-        "dataset_name": "wikihop",
+        "dataset_name": "duorc_p",
         "max_seq_length": 384,
         "doc_stride": 256
     },

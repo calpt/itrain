@@ -3,18 +3,16 @@ import os
 import time
 
 import torch
-from datasets import DownloadConfig, DownloadManager, load_metric
+from datasets import DownloadConfig, DownloadManager
 from filelock import FileLock
-from tokenizers.normalizers import Lowercase
 from tqdm import tqdm
-from transformers import PreTrainedTokenizerBase, SquadDataset, SquadDataTrainingArguments, is_torch_available
+from transformers import PreTrainedTokenizerBase, SquadDataset, SquadDataTrainingArguments
 from transformers.data.datasets.squad import Split as SquadSplit
 from transformers.data.metrics.squad_metrics import compute_predictions_logits, squad_evaluate
 from transformers.data.processors.squad import (
     SquadExample,
     SquadResult,
     SquadV1Processor,
-    SquadV2Processor,
     squad_convert_example_to_features,
     squad_convert_example_to_features_init,
     whitespace_tokenize,
@@ -45,7 +43,8 @@ class SquadLikeDataset(SquadDataset):
         do_lower_case=True,
     ):
         self.args = args
-        self.processor = SquadV2Processor() if args.version_2_with_negative else SquadV1Processor()
+        # which version to use here is irrelevant as we set the file names manually below
+        self.processor = SquadV1Processor()
         if isinstance(mode, str):
             try:
                 mode = SquadSplit[mode]
@@ -79,6 +78,7 @@ class SquadLikeDataset(SquadDataset):
                     # ugly hack: always use the dev_examples method and patch answers afterwards
                     self.examples = self.processor.get_dev_examples(args.data_dir, filename=data_file)
                     removed = 0
+                    unanswerable = 0
                     example: SquadExample
                     for example in self.examples:
                         # lower-case all examples since there's some case mismatch between context and answer
@@ -109,6 +109,18 @@ class SquadLikeDataset(SquadDataset):
                                 # discard question if it has no answers and is not marked unanswerable
                                 removed += 1
                                 example.is_valid = False
+                        else:
+                            unanswerable += 1
+                            if not args.version_2_with_negative:
+                                logger.warn(
+                                    "Found impossible question but dataset should not have them."
+                                    "Set version_2_with_negative to True."
+                                )
+                                removed += 1
+                                example.is_valid = False
+                    logger.info(
+                        f"Found a total of {len(self.examples)} examples, including {unanswerable} unanswerable."
+                    )
                     if removed > 0:
                         logger.warn(f"Removed {removed} samples from training because of missing answers.")
                         self.examples = [example for example in self.examples if example.is_valid]
@@ -120,6 +132,7 @@ class SquadLikeDataset(SquadDataset):
                     doc_stride=args.doc_stride,
                     max_query_length=args.max_query_length,
                     is_training=mode == SquadSplit.train,
+                    # threads=args.threads,
                 )
 
                 # free some space
@@ -143,16 +156,14 @@ class SquadLikeDataset(SquadDataset):
 
     def _fix_answer(self, example):
         # check if the answer span is actually valid
-        actual_text = " ".join(
-            example.doc_tokens[example.start_position : (example.end_position + 1)]
-        ).lower()
+        actual_text = " ".join(example.doc_tokens[example.start_position : (example.end_position + 1)]).lower()
         cleaned_answer_text = " ".join(whitespace_tokenize(example.answer_text)).lower()
         if actual_text.find(cleaned_answer_text) == -1:
             # try if the span is just shifted by one to the left or right
             actual_text_left = " ".join(
                 example.doc_tokens[(example.start_position - 1) : example.end_position]
             ).lower()
-            actual_text_right =  " ".join(
+            actual_text_right = " ".join(
                 example.doc_tokens[(example.start_position + 1) : (example.end_position + 2)]
             ).lower()
             if actual_text_left.find(cleaned_answer_text) != -1:
@@ -162,14 +173,13 @@ class SquadLikeDataset(SquadDataset):
                 example.start_position = example.start_position + 1
                 example.end_position = example.end_position + 1
             else:
-                logger.warning(
-                    "Could not find answer: '%s' vs. '%s'", actual_text, cleaned_answer_text
-                )
+                logger.warning("Could not find answer: '%s' vs. '%s'", actual_text, cleaned_answer_text)
                 example.is_valid = False
                 return False
         return True
 
 
+# TODO: this method should not be here
 def squad_convert_examples_to_features(
     examples,
     tokenizer,
@@ -239,10 +249,12 @@ class QADatasetManager(DatasetManager):
     def _create_squad_training_arguments(self, data_dir, overwrite_cache=False):
         # copy fields from DatasetArguments
         self.squad_args = SquadDataTrainingArguments()
-        self.max_seq_length = self.args.max_seq_length
+        self.squad_args.max_seq_length = self.args.max_seq_length
+        self.squad_args.doc_stride = self.args.doc_stride
         self.squad_args.data_dir = data_dir
         self.squad_args.version_2_with_negative = self.with_negative
         self.squad_args.overwrite_cache = overwrite_cache
+        # self.squad_args.threads = 1
 
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # download & extract dataset
@@ -312,12 +324,11 @@ class QADatasetManager(DatasetManager):
 
 
 class SquadV1Manager(QADatasetManager):
-    with_negative = False
     train_file_name = "SQuAD1-1_train.json.gz"
     dev_file_name = "SQuAD1-1_dev.json.gz"
 
 
-class SquadV2Manager(SquadV1Manager):
+class SquadV2Manager(QADatasetManager):
     with_negative = True
     train_file_name = "SQuAD2-0_train.json.gz"
     dev_file_name = "SQuAD2-0_dev.json.gz"
@@ -338,9 +349,9 @@ class HotpotQAManager(QADatasetManager):
     dev_file_name = "HotpotQA_dev.json.gz"
 
 
-class TriviaQAManager(QADatasetManager):
-    train_file_name = "TriviaQA_wiki_train.json.gz"
-    dev_file_name = "TriviaQA_wiki_dev.json.gz"
+# class TriviaQAManager(QADatasetManager):
+#     train_file_name = "TriviaQA_wiki_train.json.gz"
+#     dev_file_name = "TriviaQA_wiki_dev.json.gz"
 
 
 class ComQAManager(QADatasetManager):
@@ -353,9 +364,9 @@ class CQManager(QADatasetManager):
     dev_file_name = "ComplexQuestions_dev.json.gz"
 
 
-class CWQManager(QADatasetManager):
-    train_file_name = "ComplexWebQuestions_train.json.gz"
-    dev_file_name = "ComplexWebQuestions_dev.json.gz"
+# class CWQManager(QADatasetManager):
+#     train_file_name = "ComplexWebQuestions_train.json.gz"
+#     dev_file_name = "ComplexWebQuestions_dev.json.gz"
 
 
 class NewsQAManager(QADatasetManager):
@@ -363,9 +374,9 @@ class NewsQAManager(QADatasetManager):
     dev_file_name = "NewsQA_dev.json.gz"
 
 
-class SearchQAManager(QADatasetManager):
-    train_file_name = "SearchQA_train.json.gz"
-    dev_file_name = "SearchQA_dev.json.gz"
+# class SearchQAManager(QADatasetManager):
+#     train_file_name = "SearchQA_train.json.gz"
+#     dev_file_name = "SearchQA_dev.json.gz"
 
 
 class DuoRCParaphraseManager(QADatasetManager):

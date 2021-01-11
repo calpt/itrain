@@ -1,7 +1,8 @@
 {
     "dataset": {
         "dataset_name": "hotpotqa",
-        "max_seq_length": 384
+        "max_seq_length": 384,
+        "doc_stride": 256
     },
     "model": {
         "model_name_or_path": "roberta-base",
@@ -11,9 +12,9 @@
     },
     "training": {
         "learning_rate": 1e-4,
-        "batch_size": 16,
+        "batch_size": 8,
         "num_train_epochs": 15,
-        "patience": 4,
+        "patience": 3,
         "patience_metric": "eval_f1"
     },
     "evaluation": true,

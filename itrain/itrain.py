@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Optional, Sequence, Union
 
 import numpy as np
+import transformers
 from transformers import PreTrainedModel
 
 from .arguments import DatasetArguments, ModelArguments, RunArguments
@@ -17,6 +18,7 @@ from .runner import Runner, set_seed
 
 
 logging.basicConfig(level=logging.INFO)
+transformers.logging.set_verbosity_info()
 logger = logging.getLogger(__name__)
 
 
@@ -82,6 +84,13 @@ class Setup:
             self.notify(config["notify"])
         self._config_name = os.path.splitext(os.path.basename(file))[0]
 
+    def _setup_tokenizer(self):
+        # HACK: when using e.g. Roberta with sequence tagging, we need to set add_prefix_space
+        kwargs = {}
+        if isinstance(self.dataset_manager, TaggingDatasetManager):
+            kwargs["add_prefix_space"] = True
+        self.dataset_manager.tokenizer = create_tokenizer(self.model_args, **kwargs)
+
     def _prepare_run_args(self, args: RunArguments, restart=None):
         if not args.output_dir:
             args.output_dir = os.path.join(
@@ -100,11 +109,7 @@ class Setup:
 
     def run(self, restarts=None):
         # Set up tokenizer
-        # HACK: when using e.g. Roberta with sequence tagging, we need to set add_prefix_space
-        kwargs = {}
-        if isinstance(self.dataset_manager, TaggingDatasetManager):
-            kwargs["add_prefix_space"] = True
-        self.dataset_manager.tokenizer = create_tokenizer(self.model_args, **kwargs)
+        self._setup_tokenizer()
         # Load dataset
         self.dataset_manager.load_and_preprocess()
 
@@ -255,6 +260,7 @@ def main():
     setup = Setup(id=args.id)
     setup.load_from_file(args.config)
     if args.preprocess_only:
+        setup._setup_tokenizer()
         setup.dataset_manager.load_and_preprocess(CacheMode.USE_DATASET_NEW_FEATURES)
     else:
         setup.run(restarts=args.seeds or args.restarts)

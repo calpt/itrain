@@ -27,6 +27,13 @@ class DatasetArguments:
             "than this will be truncated, sequences shorter will be padded."
         },
     )
+    doc_stride: Optional[int] = field(
+        default=128,
+        metadata={
+            "help": "How much stride to take between chunks when splitting up a long document."
+            "Currently only used for QA tasks."
+        }
+    )
     train_subset_size: int = field(
         default=-1,
         metadata={
