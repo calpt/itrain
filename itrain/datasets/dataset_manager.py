@@ -1,4 +1,5 @@
 import inspect
+import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -12,6 +13,8 @@ from transformers.file_utils import torch_cache_home
 from ..arguments import DatasetArguments
 from .sampler import RandomSampler
 
+
+logger = logging.getLogger(__name__)
 
 DATASET_FEATURES_CACHE = os.path.join(torch_cache_home, "itrain")
 if not os.path.exists(DATASET_FEATURES_CACHE):
@@ -129,6 +132,13 @@ class DatasetManagerBase(DatasetManager):
             self.args.task_name if self._use_task_name_for_loading else self._default_subset_name,
             download_mode=download_mode,
         )
+        # split a validation set from the training set if not present
+        if not self.dev_split_name in self.dataset:
+            logger.warning("Dataset does not have a pre-defined validation split. Creating one from the training set.")
+            train_dev_split = self.dataset[self.train_split_name].train_test_split(test_size=0.2)
+            self.dataset[str(self.train_split_name)] = train_dev_split["train"]
+            self.dataset[str(self.dev_split_name)] = train_dev_split["test"]
+
         # load metric
         if self.load_metric:
             if inspect.isclass(self.load_metric) and issubclass(self.load_metric, Metric):

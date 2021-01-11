@@ -89,7 +89,7 @@ class Runner:
         if eval_dataset is None and self.dataset_manager.dev_split is None and self.dataset_manager.test_split is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
-        eval_dataset = eval_dataset or self.dataset_manager.dev_split or self.dataset_manager.test_split
+        eval_dataset = eval_dataset or self.dataset_manager.dev_split
 
         data_loader = DataLoader(
             eval_dataset,

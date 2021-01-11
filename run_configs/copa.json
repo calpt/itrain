@@ -1,12 +1,12 @@
 {
     "dataset": {
-        "dataset_name": "super_glue",
-        "task_name": "copa",
+        "dataset_name": "copa",
+        "dataset_dir": "~/itrain/itrain/ext/datasets/copa.py",
         "max_seq_length": 60
     },
     "model": {
         "model_name_or_path": "roberta-base",
-        "use_fast_tokenizer": true,
+        "use_fast_tokenizer": false,
         "train_adapter": true,
         "adapter_config": "pfeiffer"
     },
@@ -17,6 +17,6 @@
         "patience": 4,
         "patience_metric": "eval_accuracy"
     },
-    "evaluation": true,
+    "evaluation": "test",
     "notify": "telegram"
 }

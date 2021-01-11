@@ -13,6 +13,7 @@ from .dataset_manager import CacheMode, ColumnConfig, DatasetManager, DatasetMan
 from .multiple_choice import (
     ARTManager,
     CommonsenseQAManager,
+    COPAManager,
     CosmosQAManager,
     HellaswagManager,
     MultipleChoiceDatasetManager,
@@ -36,7 +37,7 @@ from .qa import (
     SquadV2Manager,
     WikiHopManager,
 )
-from .tagging import TaggingDatasetManager
+from .tagging import CoNLLManager, FCEErrorDetectionManager, TaggingDatasetManager
 
 
 DATASET_MANAGER_CLASSES = {
@@ -54,6 +55,7 @@ DATASET_MANAGER_CLASSES = {
     "emotion": EmotionDatasetManager,
     "glue": GlueManager,
     "super_glue": SuperGlueManager,
+    "copa": COPAManager,
     "hellaswag": HellaswagManager,
     "swag": SWAGManager,
     "race": RaceManager,
@@ -77,7 +79,9 @@ DATASET_MANAGER_CLASSES = {
     # "searchqa": SearchQAManager,
     "duorc_p": DuoRCParaphraseManager,
     "duorc_s": DuoRCSelfManager,
-    "conll2000": TaggingDatasetManager,
-    "conll2003": TaggingDatasetManager,
+    "conll2000": CoNLLManager,
+    "conll2003": CoNLLManager,
     "universal_dependencies": TaggingDatasetManager,
+    "fce_error_detection": FCEErrorDetectionManager,
+    "pmb_sem_tagging": TaggingDatasetManager,
 }

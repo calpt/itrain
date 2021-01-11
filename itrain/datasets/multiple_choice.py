@@ -96,6 +96,24 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
         }
 
 
+class COPAManager(MultipleChoiceDatasetManager):
+    _COPA_DICT = {
+        "cause": "What was the cause of this?",
+        "effect": "What happened as a result?",
+    }
+
+    def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
+        super().__init__(args, tokenizer)
+        self.column_config = ColumnConfig(["premise", "alternative1", "alternative2", "relation"], "label")
+        self.choice_label_map = {v: k for (k, v) in enumerate(["1", "2"])}
+
+    def _build_inputs(self, example):
+        premise, alternative1, alternative2, relation = example
+        a_s = [premise for _ in range(len(self.choice_label_map))]
+        b_s = [self._COPA_DICT[relation] + " " + alt for alt in [alternative1, alternative2]]
+        return a_s, b_s
+
+
 class SWAGManager(MultipleChoiceDatasetManager):
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer)

@@ -1,7 +1,7 @@
 {
     "dataset": {
-        "dataset_name": "imdb",
-        "max_seq_length": 256
+        "dataset_name": "pmb_sem_tagging",
+        "dataset_dir": "~/itrain/itrain/ext/datasets/pmb_sem_tagging.py"
     },
     "model": {
         "model_name_or_path": "roberta-base",
@@ -11,11 +11,11 @@
     },
     "training": {
         "learning_rate": 1e-4,
-        "batch_size": 32,
+        "batch_size": 8,
         "num_train_epochs": 15,
         "patience": 4,
         "patience_metric": "eval_accuracy"
     },
-    "evaluation": "test",
+    "evaluation": "gold",
     "notify": "telegram"
 }

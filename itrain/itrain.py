@@ -36,6 +36,7 @@ class Setup:
         self._train_run_args = None
         self._do_eval = False
         self._eval_run_args = None
+        self._eval_split = None
         self._notifiers = {}
         self._config_name = None
 
@@ -61,9 +62,10 @@ class Setup:
     def training(self, args: RunArguments):
         self._train_run_args = args
 
-    def evaluation(self, args: Optional[RunArguments] = None):
+    def evaluation(self, args: Optional[RunArguments] = None, split = None):
         self._do_eval = True
         self._eval_run_args = args
+        self._eval_split = split
 
     def notify(self, notifier_name: str, **kwargs):
         self._notifiers[notifier_name] = NOTIFIER_CLASSES[notifier_name](**kwargs)
@@ -78,6 +80,8 @@ class Setup:
         if "evaluation" in config:
             if isinstance(config["evaluation"], dict):
                 self.evaluation(RunArguments(**config["evaluation"]))
+            elif isinstance(config["evaluation"], str):
+                self.evaluation(split=config["evaluation"])
             elif config["evaluation"]:
                 self.evaluation()
         if "notify" in config:
@@ -208,13 +212,16 @@ class Setup:
                     do_save_adapter_fusion=self.model_args.train_adapter_fusion is not None,
                 )
                 try:
-                    results = runner.evaluate(log=False)
+                    eval_dataset = self.dataset_manager.dataset[self._eval_split] if self._eval_split else None
+                    results = runner.evaluate(eval_dataset=eval_dataset, log=False)
                 except Exception as ex:
                     for notifier in self._notifiers.values():
                         notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
                     raise ex
                 if epoch:
                     results["training_epochs"] = epoch
+                if self._eval_split:
+                    results["eval_split"] = self._eval_split
                 output_eval_file = os.path.join(eval_run_args.output_dir, "eval_results.txt")
                 with open(output_eval_file, "w") as f:
                     logger.info("***** Eval results {} (restart {}) *****".format(self.name, i))
