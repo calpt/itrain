@@ -14,7 +14,7 @@
         "learning_rate": 1e-4,
         "batch_size": 8,
         "num_train_epochs": 15,
-        "patience": 3,
+        "patience": 2,
         "patience_metric": "eval_f1"
     },
     "evaluation": true,

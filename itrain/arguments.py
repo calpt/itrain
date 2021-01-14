@@ -122,6 +122,7 @@ class RunArguments:
 
     logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
 
+    checkpoint_steps: int = field(default=0, metadata={"help": "Save model checkpoint after every X steps."})
     checkpoint_epochs: int = field(default=0, metadata={"help": "Save model checkpoint after every X epochs."})
     save_total_limit: Optional[int] = field(
         default=None,

@@ -33,7 +33,7 @@ class ClassificationDatasetManager(DatasetManagerBase):
         self._configure()
 
     def train_sampler(self):
-        if self.args.train_subset_size <= 0 or self.args.train_subset_size > len(self.train_split):
+        if self.args.train_subset_size <= 0 or self.args.train_subset_size >= len(self.train_split):
             return super().train_sampler()
         else:
             return StratifiedRandomSampler(

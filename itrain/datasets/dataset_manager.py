@@ -57,9 +57,12 @@ class DatasetManager(ABC):
     @property
     def name(self):
         if self.args.task_name:
-            return f"{self.args.dataset_name}_{self.args.task_name}"
+            name = f"{self.args.dataset_name}_{self.args.task_name}"
         else:
-            return self.args.dataset_name
+            name = self.args.dataset_name
+        if self.args.train_subset_size > 0:
+            name = f"{name}_n{self.args.train_subset_size}"
+        return name
 
     def _get_features_cache_file(self, split_name):
         return os.path.join(

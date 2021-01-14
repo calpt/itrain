@@ -247,6 +247,23 @@ class Runner:
                     self.global_step += 1
                     self.epoch = epoch + (step + 1) / len(epoch_iterator)
 
+                    if self.args.checkpoint_steps > 0 and self.global_step % self.args.checkpoint_steps == 0:
+                        # In all cases (even distributed/parallel), self.model is always a reference
+                        # to the model we want to save.
+                        if hasattr(model, "module"):
+                            assert model.module is self.model
+                        else:
+                            assert model is self.model
+                        # Save model checkpoint
+                        output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
+
+                        self.save_model(output_dir)
+                        self._rotate_checkpoints()
+
+                        torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                        torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+
+
                 if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
                     epoch_iterator.close()
                     break

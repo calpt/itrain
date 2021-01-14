@@ -9,11 +9,12 @@ TRANSFER_OUTPUT_DIR="transfer_output"
 FUSION_OUTPUT_DIR="fusion_output"
 RUN_CONFIGS="run_configs"
 
-def _get_dataset_config(config_name):
+def _get_dataset_config(config_name, train_size=-1):
     # init setup
     with open(os.path.join(RUN_CONFIGS, config_name+".json"), "r", encoding="utf-8") as f:
         config = json.load(f)
     # dataset manager
+    config["dataset"]["train_subset_size"] = train_size
     dataset_args = DatasetArguments(**config["dataset"])
     dataset_manager = DATASET_MANAGER_CLASSES[dataset_args.dataset_name](dataset_args)
     return dataset_manager, config
@@ -32,72 +33,90 @@ def _restore_path(adapter_map, task_name, manager):
 def run_seq_finetuning(args):
     results = {}
     # init setup
-    dataset_manager, config = _get_dataset_config(args["target_task"])
-    output_base = os.path.join(TRANSFER_OUTPUT_DIR, "to_" + args["target_task"])
+    dataset_manager, config = _get_dataset_config(args["target_task"], train_size=args["train_size"])
+    if args["train_size"] > 0:
+        target_task_name = args["target_task"] + "_n" + str(args["train_size"])
+    else:
+        target_task_name = args["target_task"]
+    output_base = os.path.join(TRANSFER_OUTPUT_DIR, "to_" + target_task_name)
     # patch model/ training args
     config["training"]["learning_rate"] = args["learning_rate"] or 1e-4
     config["training"]["num_train_epochs"] = args["num_train_epochs"]
+
     # iterate over adapters for fusion
     with open(args["trained_adapter_map"], "r") as f:
         trained_adapter_map = json.load(f)
     for task_name in trained_adapter_map["from"]:
+        print(f"*** Running transfer from {task_name} to {target_task_name} ***")
+        output_dir = os.path.join(output_base, task_name)
+        # skip this iteration if no overwrites requested & existing
+        if not args["overwrite_output"] and os.path.exists(output_dir):
+            print(f"Skipping task {task_name} as it already exists.")
+            continue
+
         pre_training_dataset_manager, _ = _get_dataset_config(task_name)
         setup = Setup(id=args["id"])
         setup.dataset(dataset_manager)
-        output_dir = os.path.join(output_base, task_name)
         config["training"]["output_dir"] = output_dir
         setup.training(RunArguments(**config["training"]))
-        setup.evaluation()
+        if isinstance(config["evaluation"], str):
+            setup.evaluation(split=config["evaluation"])
+        else:
+            setup.evaluation()
         setup.notify(config["notify"])
-        setup._config_name = "transfer_" + args["target_task"] + "_" + task_name
+        setup._config_name = "transfer_" + task_name + "_to_" + target_task_name
         # setup model
         config["model"]["load_adapters"] = {
             dataset_manager.name: _restore_path(trained_adapter_map, task_name, pre_training_dataset_manager)
         }
         setup.model(ModelArguments(**config["model"]))
         # start!
-        run_results = setup.run()
+        run_results = setup.run(restarts=args["restarts"])
         results[task_name] = run_results
+
     # save results
     with open(os.path.join(output_base, "eval_results.json"), "w") as f:
         json.dump(results, f)
 
 
-def run_fusion_seq(args):
-    results = {}
-    # init setup
-    dataset_manager, config = _get_dataset_config(args["target_task"])
-    output_base = os.path.join(FUSION_OUTPUT_DIR, "to_" + args["target_task"])
-    # patch model/ training args
-    config["model"]["train_adapter"] = False
-    config["training"]["learning_rate"] = args["learning_rate"] or 5e-5
-    config["training"]["num_train_epochs"] = args["num_train_epochs"]
-    # iterate over adapters for fusion
-    with open(args["trained_adapter_map"], "r") as f:
-        trained_adapter_map = json.load(f)
-    for task_name in trained_adapter_map["from"]:
-        fusion_dataset_manager, _ = _get_dataset_config(task_name)
-        setup = Setup(id=args["id"])
-        setup.dataset(dataset_manager)
-        output_dir = os.path.join(output_base, task_name)
-        config["training"]["output_dir"] = output_dir
-        setup.training(RunArguments(**config["training"]))
-        setup.evaluation()
-        setup.notify(config["notify"])
-        setup._config_name = "fusion_" + args["target_task"] + "_" + task_name
-        # setup model
-        config["model"]["load_adapters"] = [
-            _restore_path(trained_adapter_map, args["target_task"], dataset_manager),
-            _restore_path(trained_adapter_map, task_name, fusion_dataset_manager)
-        ]
-        config["model"]["train_adapter_fusion"] = ",".join([dataset_manager.name, fusion_dataset_manager.name])
-        setup.model(ModelArguments(**config["model"]))
-        # start!
-        run_results = setup.run()
-        results[task_name] = run_results
-    # save results
-    with open(os.path.join(output_base, "eval_results.json"), "w") as f:
-        json.dump(results, f)
+# def run_fusion_seq(args):
+#     results = {}
+#     # init setup
+#     dataset_manager, config = _get_dataset_config(args["target_task"], train_size=args["train_size"])
+#     output_base = os.path.join(FUSION_OUTPUT_DIR, "to_" + args["target_task"])
+#     # patch model/ training args
+#     config["model"]["train_adapter"] = False
+#     config["training"]["learning_rate"] = args["learning_rate"] or 5e-5
+#     config["training"]["num_train_epochs"] = args["num_train_epochs"]
+#     # iterate over adapters for fusion
+#     with open(args["trained_adapter_map"], "r") as f:
+#         trained_adapter_map = json.load(f)
+#     for task_name in trained_adapter_map["from"]:
+#         fusion_dataset_manager, _ = _get_dataset_config(task_name)
+#         setup = Setup(id=args["id"])
+#         setup.dataset(dataset_manager)
+#         output_dir = os.path.join(output_base, task_name)
+#         config["training"]["output_dir"] = output_dir
+#         setup.training(RunArguments(**config["training"]))
+#         if isinstance(config["evaluation"], str):
+#             setup.evaluation(split=config["evaluation"])
+#         else:
+#             setup.evaluation()
+#         setup.notify(config["notify"])
+#         setup._config_name = "fusion_" + args["target_task"] + "_" + task_name
+#         # setup model
+#         config["model"]["load_adapters"] = [
+#             _restore_path(trained_adapter_map, args["target_task"], dataset_manager),
+#             _restore_path(trained_adapter_map, task_name, fusion_dataset_manager)
+#         ]
+#         config["model"]["train_adapter_fusion"] = ",".join([dataset_manager.name, fusion_dataset_manager.name])
+#         setup.model(ModelArguments(**config["model"]))
+#         # start!
+#         run_results = setup.run(restarts=args["restarts"])
+#         results[task_name] = run_results
+#     # save results
+#     with open(os.path.join(output_base, "eval_results.json"), "w") as f:
+#         json.dump(results, f)
 
 
 if __name__ == "__main__":
@@ -110,11 +129,14 @@ if __name__ == "__main__":
     parser.add_argument("--fusion", action="store_true", default=False)
     parser.add_argument("--learning_rate", type=float, default=None)
     parser.add_argument("--num_train_epochs", type=int, default=8)
+    parser.add_argument("--train_size", type=int, default=-1)
+    parser.add_argument("--restarts", type=int, default=None)
     args = vars(parser.parse_args())
 
     fusion = args.pop("fusion")
 
     if fusion:
-        run_fusion_seq(args)
+        raise ValueError()
+        # run_fusion_seq(args)
     else:
         run_seq_finetuning(args)

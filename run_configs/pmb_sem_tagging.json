@@ -16,6 +16,6 @@
         "patience": 4,
         "patience_metric": "eval_accuracy"
     },
-    "evaluation": "gold",
+    "evaluation": true,
     "notify": "telegram"
 }

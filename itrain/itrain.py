@@ -62,7 +62,7 @@ class Setup:
     def training(self, args: RunArguments):
         self._train_run_args = args
 
-    def evaluation(self, args: Optional[RunArguments] = None, split = None):
+    def evaluation(self, args: Optional[RunArguments] = None, split=None):
         self._do_eval = True
         self._eval_run_args = args
         self._eval_split = split
@@ -121,8 +121,28 @@ class Setup:
             restarts = [42]
         if not isinstance(restarts, Sequence):
             restarts = [None for _ in range(int(restarts))]
+        has_restarts = len(restarts) > 1
         # collect results
         all_results = defaultdict(list)
+
+        # Init notifier
+        # notifier_name should not start with a numeric char
+        if isinstance(self.id, int) or self.id[0].isnumeric():
+            notifier_name = ["#id" + str(self.id)]
+        else:
+            notifier_name = [self.id]
+        notifier_name.append(self.model_args.model_name_or_path)
+        if self.name:
+            notifier_name.append(self.name)
+        for notifier in self._notifiers.values():
+            if not notifier.title:
+                notifier.title = ", ".join(notifier_name)
+
+        if has_restarts:
+            for notifier in self._notifiers.values():
+                notifier.notify_start(
+                    message=f"Training setup ({len(restarts)} runs):", **self._train_run_args.to_sanitized_dict()
+                )
 
         for i, seed in enumerate(restarts):
             # Set seed
@@ -132,19 +152,9 @@ class Setup:
             # Set up model
             self.model_instance = create_model(self.model_args, self.dataset_manager)
 
-            # Init notifier
-            name = ["#id" + str(self.id)]
-            if self.model_instance.model_name:
-                name.append(self.model_instance.model_name)
-            if self.name:
-                name.append(self.name)
-            for notifier in self._notifiers.values():
-                if not notifier.title:
-                    notifier.title = ", ".join(name)
-
             # Configure and run training
             if self._train_run_args:
-                train_run_args = self._prepare_run_args(self._train_run_args, restart=i if len(restarts) > 1 else None)
+                train_run_args = self._prepare_run_args(self._train_run_args, restart=i if has_restarts else None)
                 runner = Runner(
                     self.model_instance,
                     train_run_args,
@@ -154,8 +164,11 @@ class Setup:
                     do_save_adapters=self.model_args.train_adapter,
                     do_save_adapter_fusion=self.model_args.train_adapter_fusion is not None,
                 )
-                for notifier in self._notifiers.values():
-                    notifier.notify_start(message="Training setup:", seed=seed, **train_run_args.to_sanitized_dict())
+                if not has_restarts:
+                    for notifier in self._notifiers.values():
+                        notifier.notify_start(
+                            message="Training setup:", seed=seed, **train_run_args.to_sanitized_dict()
+                        )
                 try:
                     step, epoch, loss, best_score, best_model_dir = runner.train(
                         self.model_args.model_name_or_path
@@ -200,7 +213,7 @@ class Setup:
             # Configure and run eval
             if self._do_eval:
                 eval_run_args = self._prepare_run_args(
-                    self._eval_run_args or self._train_run_args, restart=i if len(restarts) > 1 else None
+                    self._eval_run_args or self._train_run_args, restart=i if has_restarts else None
                 )
                 runner = Runner(
                     self.model_instance,
@@ -230,11 +243,14 @@ class Setup:
                         f.write("%s = %s\n" % (key, value))
                         # also append to aggregated results
                         all_results[key].append(value)
-                for notifier in self._notifiers.values():
-                    notifier.notify_end(message="Evaluation results:", **results)
+                if not has_restarts:
+                    for notifier in self._notifiers.values():
+                        notifier.notify_end(message="Evaluation results:", **results)
+            # Delete model
+            del self.model_instance
 
         # post-process aggregated results
-        if len(restarts) > 1 and self._do_eval:
+        if has_restarts and self._do_eval:
             stats = {"seeds": all_results["seeds"]}
             for key, values in all_results.items():
                 if isinstance(values[0], float):
@@ -244,6 +260,8 @@ class Setup:
             output_dir = self._eval_run_args.output_dir if self._eval_run_args else self._train_run_args.output_dir
             with open(os.path.join(output_dir, "aggregated_results.json"), "w") as f:
                 json.dump(stats, f)
+            for notifier in self._notifiers.values():
+                notifier.notify_end(message=f"Aggregated results ({len(restarts)} runs):", **stats)
 
         return dict(all_results)
 

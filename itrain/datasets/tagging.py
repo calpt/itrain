@@ -21,6 +21,7 @@ class TaggingDatasetManager(DatasetManagerBase):
         column_config: ColumnConfig = None,
     ):
         super().__init__(args, tokenizer, load_metric=False)
+        self._padding = False
         self.column_config = column_config or self._get_column_config()
 
     def _get_column_config(self):
@@ -28,7 +29,7 @@ class TaggingDatasetManager(DatasetManagerBase):
             return ColumnConfig("tokens", "upos")
         elif self.args.dataset_name == "pmb_sem_tagging":
             self.train_split_name = "silver"
-            self.test_split_name = "gold"
+            self.dev_split_name = "gold"
             return ColumnConfig("tokens", "sem_tags")
         else:
             raise ValueError("No ColumnConfig specified.")
@@ -50,7 +51,6 @@ class TaggingDatasetManager(DatasetManagerBase):
             self.label_list = self._get_label_list(
                 self.train_split[self.column_config.label]
                 + self.dev_split[self.column_config.label]
-                + self.test_split[self.column_config.label]
             )
             self.label_to_id = {l: i for i, l in enumerate(self.label_list)}
         self.collate_fn = DataCollatorForTokenClassification(self.tokenizer)

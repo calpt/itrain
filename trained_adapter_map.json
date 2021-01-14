@@ -29,11 +29,15 @@
         "snli": "41454",
         "yelp_polarity": "41568",
         "squad": "42540",
-        "stsb": "40186"
+        "stsb": "40186",
+        "duorc_s": "49672",
+        "hotpotqa": "49648",
+        "cosmos_qa": "45643",
+        "multirc": "40979",
+        "fce_error_detection": "49661"
     },
     "from": [
         "universal_dependencies",
-        "conll2003",
         "imdb",
         "scitail",
         "social_i_qa",
@@ -41,7 +45,7 @@
         "winogrande",
         "sst2",
         "swag",
-        "drop",
+        "duorc_s",
         "race",
         "record",
         "qnli",
