@@ -41,6 +41,11 @@ def create_model(args: ModelArguments, manager: DatasetManager):
         fusion_adapters = args.train_adapter_fusion.split(",")
         model.add_fusion(fusion_adapters)
         model.train_fusion(fusion_adapters)
+    # drop the last layer of AF, this tends to achieve better results
+    if args.train_adapter_fusion is not None and args.drop_last_fusion_layer:
+        del model.base_model.encoder.layer[11].output.adapter_fusion_layer[args.train_adapter_fusion]
+        for name in args.load_adapters:
+            del model.base_model.encoder.layer[11].output.layer_text_task_adapters[name]
 
     model.add_prediction_head_from_config(
         manager.name,

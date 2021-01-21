@@ -19,8 +19,9 @@ class RandomSampler(Sampler):
     data_source: Sized
     replacement: bool
 
-    def __init__(self, data_source: Sized, replacement: bool = False,
-                 num_samples: Optional[int] = None, generator=None) -> None:
+    def __init__(
+        self, data_source: Sized, replacement: bool = False, num_samples: Optional[int] = None, generator=None
+    ) -> None:
         self.data_source = data_source
         self.replacement = replacement
         self.generator = generator
@@ -44,9 +45,11 @@ class RandomSampler(Sampler):
         if self.replacement:
             for _ in range(self.num_samples // 32):
                 yield from torch.randint(high=n, size=(32,), dtype=torch.int64, generator=self.generator).tolist()
-            yield from torch.randint(high=n, size=(self.num_samples % 32,), dtype=torch.int64, generator=self.generator).tolist()
+            yield from torch.randint(
+                high=n, size=(self.num_samples % 32,), dtype=torch.int64, generator=self.generator
+            ).tolist()
         else:
-            yield from torch.randperm(n, generator=self.generator).tolist()[:self.num_samples]
+            yield from torch.randperm(n, generator=self.generator).tolist()[: self.num_samples]
 
     def __len__(self):
         return self.num_samples
@@ -68,11 +71,11 @@ class StratifiedRandomSampler(Sampler):
     num_samples: int
     replacement: bool
 
-    def __init__(self, class_labels: Sequence, num_samples: int,
-                 replacement: bool = False, generator=None) -> None:
+    def __init__(self, class_labels: Sequence, num_samples: int, replacement: bool = False, generator=None) -> None:
         if not isinstance(num_samples, int) or num_samples <= 0:
-            raise ValueError("num_samples should be a positive integer "
-                             "value, but got num_samples={}".format(num_samples))
+            raise ValueError(
+                "num_samples should be a positive integer " "value, but got num_samples={}".format(num_samples)
+            )
 
         # count occurences
         class_counts = defaultdict(int)
@@ -82,8 +85,43 @@ class StratifiedRandomSampler(Sampler):
         # set weights
         weights = []
         for example in class_labels:
-            weights.append(class_counts[example] / total)        
+            weights.append(class_counts[example] / total)
         self.weights = torch.as_tensor(weights, dtype=torch.double)
+
+        self.num_samples = num_samples
+        self.replacement = replacement
+        self.generator = generator
+
+    def __iter__(self):
+        rand_tensor = torch.multinomial(self.weights, self.num_samples, self.replacement, generator=self.generator)
+        return iter(rand_tensor.tolist())
+
+    def __len__(self):
+        return self.num_samples
+
+
+class QAPossibleSubsetRandomSampler(Sampler):
+    """Samples a random subset from the possible examples of a SQuAD-style QA dataset."""
+
+    num_samples: int
+    replacement: bool
+
+    def __init__(self, features: Sequence, num_samples: int, replacement: bool = False, generator=None) -> None:
+        if not isinstance(num_samples, int) or num_samples <= 0:
+            raise ValueError(
+                "num_samples should be a positive integer " "value, but got num_samples={}".format(num_samples)
+            )
+
+        # count possible instances
+        possible = 0
+        weights = []
+        for feature in features:
+            if not feature.is_impossible:
+                possible += 1
+                weights.append(1)
+            else:
+                weights.append(0)
+        self.weights = torch.as_tensor(weights, dtype=torch.double) * (possible / len(features))
 
         self.num_samples = num_samples
         self.replacement = replacement

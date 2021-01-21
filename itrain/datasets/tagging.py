@@ -29,7 +29,7 @@ class TaggingDatasetManager(DatasetManagerBase):
             return ColumnConfig("tokens", "upos")
         elif self.args.dataset_name == "pmb_sem_tagging":
             self.train_split_name = "silver"
-            self.dev_split_name = "gold"
+            self.test_split_name = "gold"
             return ColumnConfig("tokens", "sem_tags")
         else:
             raise ValueError("No ColumnConfig specified.")
@@ -48,10 +48,10 @@ class TaggingDatasetManager(DatasetManagerBase):
             self.label_list = self.train_split.features[self.column_config.label].feature.names
             self.label_to_id = {i: i for i in range(len(self.label_list))}
         else:
-            self.label_list = self._get_label_list(
-                self.train_split[self.column_config.label]
-                + self.dev_split[self.column_config.label]
-            )
+            labels = self.train_split[self.column_config.label] + self.dev_split[self.column_config.label]
+            if self.test_split:
+                labels += self.test_split[self.column_config.label]
+            self.label_list = self._get_label_list(labels)
             self.label_to_id = {l: i for i, l in enumerate(self.label_list)}
         self.collate_fn = DataCollatorForTokenClassification(self.tokenizer)
 

@@ -21,7 +21,7 @@ def _get_dataset_config(config_name, train_size=-1):
 
 
 def _restore_path(adapter_map, task_name, manager):
-    template = adapter_map["path_format"]
+    template = adapter_map["source_path_format"]
     run_id = adapter_map["adapters"][task_name]
     # HACK: the actual path to the adapter may have different names
     path = os.path.expanduser(template.format(task_name, run_id, manager.name))

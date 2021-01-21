@@ -43,6 +43,13 @@ class DatasetArguments:
     )
 
     @property
+    def base_name(self):
+        if self.task_name:
+            return f"{self.dataset_name}_{self.task_name}"
+        else:
+            return self.dataset_name
+
+    @property
     def identifier(self):
         return "_".join([self.dataset_name, self.task_name or "", str(self.max_seq_length)])
 
@@ -79,6 +86,7 @@ class ModelArguments:
         default=None,
         metadata={"help": "Train AdapterFusion between the specified adapters instead of the full model."},
     )
+    drop_last_fusion_layer: bool = False
 
 
 @dataclass

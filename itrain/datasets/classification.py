@@ -256,6 +256,9 @@ class SuperGlueManager(ClassificationDatasetManager):
         else:
             raise ValueError()
 
+    def _custom_filter(self, example):
+        return True  # Override for custom filtering
+
     def encode_batch(self, examples):
         return self._encode_batch(examples)
 

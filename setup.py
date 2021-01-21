@@ -13,7 +13,7 @@ setup(
     # url
     packages=find_packages(),
     install_requires=[
-        "adapter-transformers",
+        "adapter-transformers == 1.1.1",
         "datasets",
         "seqeval",
         "sklearn",

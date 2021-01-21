@@ -20,6 +20,7 @@ from transformers.data.processors.squad import (
 
 from ..arguments import DatasetArguments
 from .dataset_manager import DATASET_FEATURES_CACHE, CacheMode, DatasetManager
+from .sampler import QAPossibleSubsetRandomSampler
 
 
 logger = logging.getLogger(__name__)
@@ -245,6 +246,16 @@ class QADatasetManager(DatasetManager):
         self.train_split_name = "train"
         self.dev_split_name = "dev"
         self.always_call_metrics = True
+
+    def train_sampler(self):
+        if self.with_negative or self.args.train_subset_size <= 0 or self.args.train_subset_size >= len(self.train_split):
+            return super().train_sampler()
+        else:
+            # only sample from the possible questions of the dataset
+            return QAPossibleSubsetRandomSampler(
+                self.train_split.features,
+                self.args.train_subset_size,
+            )
 
     def _create_squad_training_arguments(self, data_dir, overwrite_cache=False):
         # copy fields from DatasetArguments

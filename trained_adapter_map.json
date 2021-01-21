@@ -1,5 +1,5 @@
 {
-    "path_format": "~/itrain/run_output/roberta/{0}/{1}/checkpoint-best/{2}",
+    "source_path_format": "~/itrain/run_output/roberta/{0}/{1}/checkpoint-best/{2}",
     "adapters": {
         "cb": "40506",
         "cq": "42816",
@@ -9,7 +9,6 @@
         "cola": "40187",
         "commonsense_qa": "45622",
         "universal_dependencies": "47610",
-        "conll2003": "47576",
         "imdb": "40330",
         "scitail": "43622",
         "social_i_qa": "44532",
@@ -34,7 +33,8 @@
         "hotpotqa": "49648",
         "cosmos_qa": "45643",
         "multirc": "40979",
-        "fce_error_detection": "49661"
+        "fce_error_detection": "49661",
+        "wikihop": "50166"
     },
     "from": [
         "universal_dependencies",
@@ -56,5 +56,13 @@
         "mnli",
         "snli",
         "yelp_polarity"
-    ]
+    ],
+    "target_path_format": "~/itrain/limited_output/{0}/{1}/0/checkpoint-best/{2}",
+    "to": {
+        "rte": "eval_accuracy",
+        "copa": "eval_accuracy",
+        "rotten_tomatoes": "eval_accuracy",
+        "cq": "eval_f1",
+        "conll2003": "eval_f1"
+    }
 }
