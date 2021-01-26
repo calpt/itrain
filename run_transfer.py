@@ -31,7 +31,6 @@ def _restore_path(adapter_map, task_name, manager):
 
 
 def run_seq_finetuning(args):
-    results = {}
     # init setup
     dataset_manager, config = _get_dataset_config(args["target_task"], train_size=args["train_size"])
     if args["train_size"] > 0:
@@ -42,6 +41,14 @@ def run_seq_finetuning(args):
     # patch model/ training args
     config["training"]["learning_rate"] = args["learning_rate"] or 1e-4
     config["training"]["num_train_epochs"] = args["num_train_epochs"]
+
+    # load results if existing
+    final_results_file = os.path.join(output_base, "eval_results.json")
+    if os.path.exists(final_results_file):
+        with open(final_results_file, "r") as f:
+            results = json.load(f)
+    else:
+        results = {}
 
     # iterate over adapters for fusion
     with open(args["trained_adapter_map"], "r") as f:
@@ -75,7 +82,7 @@ def run_seq_finetuning(args):
         results[task_name] = run_results
 
     # save results
-    with open(os.path.join(output_base, "eval_results.json"), "w") as f:
+    with open(final_results_file, "w") as f:
         json.dump(results, f)
 
 
@@ -83,7 +90,7 @@ def run_seq_finetuning(args):
 #     results = {}
 #     # init setup
 #     dataset_manager, config = _get_dataset_config(args["target_task"], train_size=args["train_size"])
-#     output_base = os.path.join(FUSION_OUTPUT_DIR, "to_" + args["target_task"])
+#     output_base = os.path.join(FUSION_OUTPUT_DIR, "to_" + args["target_task"] + "_v2")  # TODO
 #     # patch model/ training args
 #     config["model"]["train_adapter"] = False
 #     config["training"]["learning_rate"] = args["learning_rate"] or 5e-5
@@ -105,10 +112,10 @@ def run_seq_finetuning(args):
 #         setup.notify(config["notify"])
 #         setup._config_name = "fusion_" + args["target_task"] + "_" + task_name
 #         # setup model
-#         config["model"]["load_adapters"] = [
-#             _restore_path(trained_adapter_map, args["target_task"], dataset_manager),
-#             _restore_path(trained_adapter_map, task_name, fusion_dataset_manager)
-#         ]
+#         config["model"]["load_adapters"] = {
+#             dataset_manager.name: _restore_path(trained_adapter_map, args["target_task"], dataset_manager),
+#             fusion_dataset_manager.name: _restore_path(trained_adapter_map, task_name, fusion_dataset_manager)
+#         }
 #         config["model"]["train_adapter_fusion"] = ",".join([dataset_manager.name, fusion_dataset_manager.name])
 #         setup.model(ModelArguments(**config["model"]))
 #         # start!
@@ -128,7 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("--overwrite_output", action="store_true", default=False)
     parser.add_argument("--fusion", action="store_true", default=False)
     parser.add_argument("--learning_rate", type=float, default=None)
-    parser.add_argument("--num_train_epochs", type=int, default=8)
+    parser.add_argument("--num_train_epochs", type=int, default=15)
     parser.add_argument("--train_size", type=int, default=-1)
     parser.add_argument("--restarts", type=int, default=None)
     args = vars(parser.parse_args())

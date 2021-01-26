@@ -248,7 +248,11 @@ class QADatasetManager(DatasetManager):
         self.always_call_metrics = True
 
     def train_sampler(self):
-        if self.with_negative or self.args.train_subset_size <= 0 or self.args.train_subset_size >= len(self.train_split):
+        if (
+            self.with_negative
+            or self.args.train_subset_size <= 0
+            or self.args.train_subset_size >= len(self.train_split)
+        ):
             return super().train_sampler()
         else:
             # only sample from the possible questions of the dataset
@@ -269,7 +273,7 @@ class QADatasetManager(DatasetManager):
 
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # download & extract dataset
-        dl_cache_dir = os.path.join(DATASET_DOWNLOAD_CACHE, self.args.identifier)
+        dl_cache_dir = os.path.join(DATASET_DOWNLOAD_CACHE, self.args.base_name)
         download_config = DownloadConfig(
             cache_dir=dl_cache_dir,
             force_download=cache_mode == CacheMode.NEW_DATASET_NEW_FEATURES,
@@ -400,3 +404,22 @@ class DuoRCSelfManager(QADatasetManager):
     with_negative = True
     train_file_name = "DuoRC_Self_train.json.gz"
     dev_file_name = "DuoRC_Self_dev.json.gz"
+
+
+## Not in MultiQA ##
+
+
+class QuorefManager(QADatasetManager):
+    def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
+        # download & extract dataset
+        dl_cache_dir = os.path.join(DATASET_DOWNLOAD_CACHE, self.args.base_name)
+        download_config = DownloadConfig(
+            cache_dir=dl_cache_dir,
+            force_download=cache_mode == CacheMode.NEW_DATASET_NEW_FEATURES,
+        )
+        download_manager = DownloadManager(dataset_name=self.args.dataset_name, download_config=download_config)
+        dl_folder_path = download_manager.download_and_extract(
+            "https://quoref-dataset.s3-us-west-2.amazonaws.com/train_and_dev/quoref-train-dev-v0.1.zip"
+        )
+        self._dl_train_file = os.path.join(dl_folder_path, "quoref-train-dev-v0.1", "quoref-train-v0.1.json")
+        self._dl_dev_file = os.path.join(dl_folder_path, "quoref-train-dev-v0.1", "quoref-dev-v0.1.json")

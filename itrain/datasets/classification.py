@@ -252,7 +252,10 @@ class SuperGlueManager(ClassificationDatasetManager):
         elif self.args.task_name == "record":
             self.column_config = ColumnConfig(["passage", "query", "entities"], "answers")
             self._encode_batch = self._encode_batch_record
-        # TODO wic ? wsc ?
+        elif self.args.task_name == "wic":
+            self.column_config = ColumnConfig(["sentence1", "sentence2", "word"], "label")
+            self._encode_batch = self._encode_batch_wic
+        # TODO wsc ?
         else:
             raise ValueError()
 
@@ -322,7 +325,18 @@ class SuperGlueManager(ClassificationDatasetManager):
         return encoded
 
     def _encode_batch_wic(self, examples):
-        raise NotImplementedError()  # TODO WIC & WSC seem to need span classification ?
+        sentences = []
+        # concat all three input parts with [SEP] token
+        for parts in zip(*[examples[c] for c in self.column_config.inputs]):
+            sentences.append(self.tokenizer.sep_token.join(parts))
+        encoded = self.tokenizer(
+            sentences,
+            max_length=self.args.max_seq_length,
+            truncation=self._truncation,
+            padding=self._padding,
+        )
+        encoded.update({"labels": examples[self.column_config.label]})
+        return encoded
 
     def _encode_batch_wsc(self, examples):
         raise NotImplementedError()  # TODO WIC & WSC seem to need span classification ?
