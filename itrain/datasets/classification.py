@@ -21,6 +21,7 @@ class ClassificationDatasetManager(DatasetManagerBase):
         "snli": 3,
         "trec": 6,
         "eraser_multi_rc": 2,
+        "sick": 3,
     }
 
     def __init__(
@@ -50,6 +51,8 @@ class ClassificationDatasetManager(DatasetManagerBase):
             self.column_config = ColumnConfig(["premise", "hypothesis"], "label")
         elif self.args.dataset_name == "eraser_multi_rc":
             self.column_config = ColumnConfig(["passage", "query_and_answer"], "label")
+        elif self.args.dataset_name == "sick":
+            self.column_config = ColumnConfig(["sentence_A", "sentence_B"], "label")
         else:
             self.column_config = ColumnConfig(["text"], "label")
 

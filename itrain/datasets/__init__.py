@@ -50,6 +50,7 @@ DATASET_MANAGER_CLASSES = {
     "trec": ClassificationDatasetManager,
     "snli": ClassificationDatasetManager,
     "eraser_multi_rc": ClassificationDatasetManager,
+    "sick": ClassificationDatasetManager,
     "wiki_qa": WikiQAManager,
     "scitail": SciTailManager,
     "anli": ANLIManager,

@@ -34,7 +34,8 @@
         "cosmos_qa": "45643",
         "multirc": "40979",
         "fce_error_detection": "49661",
-        "wikihop": "50166"
+        "wikihop": "50166",
+        "pmb_sem_tagging": "50678"
     },
     "from": [
         "universal_dependencies",
@@ -55,7 +56,8 @@
         "qqp",
         "mnli",
         "snli",
-        "yelp_polarity"
+        "yelp_polarity",
+        "pmb_sem_tagging"
     ],
     "target_path_format": "~/itrain/limited_output/{0}/{1}/0/checkpoint-best/{2}",
     "to": {
@@ -63,6 +65,11 @@
         "copa": "eval_accuracy",
         "rotten_tomatoes": "eval_accuracy",
         "cq": "eval_f1",
-        "conll2003": "eval_f1"
+        "conll2003": "eval_f1",
+        "commonsense_qa": "eval_accuracy",
+        "stsb": "eval_spearmanr",
+        "drop": "eval_f1",
+        "quail": "eval_accuracy",
+        "boolq": "eval_accuracy"
     }
 }
