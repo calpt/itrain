@@ -57,7 +57,7 @@ def run_seq_finetuning(args):
         print(f"*** Running transfer from {task_name} to {target_task_name} ***")
         output_dir = os.path.join(output_base, task_name)
         # skip this iteration if no overwrites requested & existing
-        if not args["overwrite_output"] and os.path.exists(output_dir):
+        if args["overwrite_mode"] == 0 and os.path.exists(output_dir):
             print(f"Skipping task {task_name} as it already exists.")
             continue
 
@@ -78,8 +78,14 @@ def run_seq_finetuning(args):
         }
         setup.model(ModelArguments(**config["model"]))
         # start!
-        run_results = setup.run(restarts=args["restarts"])
-        results[task_name] = run_results
+        if task_name in results and args["overwrite_mode"] == 1:
+            # append to existing
+            run_results = setup.run(restarts=args["restarts"], first_run_index=len(results[task_name]["seeds"]))
+            for k, v in run_results.items():
+                results[task_name][k] += v
+        else:
+            run_results = setup.run(restarts=args["restarts"])
+            results[task_name] = run_results
 
     # save results
     with open(final_results_file, "w") as f:
@@ -132,7 +138,7 @@ if __name__ == "__main__":
     parser.add_argument("target_task", type=str, help="Name of the target task training setup.")
     parser.add_argument("--id", type=int, default=0, help="ID of this run.")
     parser.add_argument("--trained_adapter_map", type=str, required=True)
-    parser.add_argument("--overwrite_output", action="store_true", default=False)
+    parser.add_argument("--overwrite_mode", type=int, choices=[0, 1, 2], default=0, help="0: no overwrite; 1: append; 2: overwrite")
     parser.add_argument("--fusion", action="store_true", default=False)
     parser.add_argument("--learning_rate", type=float, default=None)
     parser.add_argument("--num_train_epochs", type=int, default=15)

@@ -111,7 +111,7 @@ class Setup:
             prepared_args.logging_dir = os.path.join(args.logging_dir, str(restart))
         return prepared_args
 
-    def run(self, restarts=None):
+    def run(self, restarts=None, first_run_index=0):
         # Set up tokenizer
         self._setup_tokenizer()
         # Load dataset
@@ -144,7 +144,7 @@ class Setup:
                     message=f"Training setup ({len(restarts)} runs):", **self._train_run_args.to_sanitized_dict()
                 )
 
-        for i, seed in enumerate(restarts):
+        for i, seed in enumerate(restarts, start=first_run_index):
             # Set seed
             seed = set_seed(seed)
             all_results["seeds"].append(seed)
@@ -258,7 +258,7 @@ class Setup:
                     stats[f"{key}_std"] = np.std(values)
 
             output_dir = self._eval_run_args.output_dir if self._eval_run_args else self._train_run_args.output_dir
-            with open(os.path.join(output_dir, "aggregated_results.json"), "w") as f:
+            with open(os.path.join(output_dir, f"aggregated_results_{self.id}.json"), "w") as f:
                 json.dump(stats, f)
             for notifier in self._notifiers.values():
                 notifier.notify_end(message=f"Aggregated results ({len(restarts)} runs):", **stats)
