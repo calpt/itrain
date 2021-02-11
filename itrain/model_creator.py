@@ -1,9 +1,27 @@
 from typing import Mapping
 
-from transformers import AdapterConfig, AdapterType, AutoConfig, AutoModelWithHeads, AutoTokenizer
+from transformers import (
+    AdapterConfig,
+    AdapterType,
+    AutoConfig,
+    AutoModelForMultipleChoice,
+    AutoModelForQuestionAnswering,
+    AutoModelForSequenceClassification,
+    AutoModelForTokenClassification,
+    AutoModelWithHeads,
+    AutoTokenizer,
+)
 
 from .arguments import ModelArguments
 from .datasets import DatasetManager
+
+
+HEAD_TO_CLASSIC_MODEL_MAP = {
+    "classification": AutoModelForSequenceClassification,
+    "tagging": AutoModelForTokenClassification,
+    "multiple_choice": AutoModelForMultipleChoice,
+    "question_answering": AutoModelForQuestionAnswering,
+}
 
 
 def create_tokenizer(args: ModelArguments, **kwargs):
@@ -14,9 +32,21 @@ def create_tokenizer(args: ModelArguments, **kwargs):
     )
 
 
-def create_model(args: ModelArguments, manager: DatasetManager):
-    config = AutoConfig.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-    model = AutoModelWithHeads.from_pretrained(args.model_name_or_path, config=config)
+# TODO check full fine-tuning with flex heads
+def create_model(args: ModelArguments, manager: DatasetManager, use_classic_model_class=False):
+    head_config = manager.get_prediction_head_config()
+    num_labels = (
+        head_config["num_choices"] if head_config["head_type"] == "multiple_choice" else head_config["num_labels"]
+    )
+    config = AutoConfig.from_pretrained(
+        args.config_name if args.config_name else args.model_name_or_path, num_labels=num_labels
+    )
+
+    if use_classic_model_class:
+        head_type = head_config["head_type"]
+        model = HEAD_TO_CLASSIC_MODEL_MAP[head_type].from_pretrained(args.model_name_or_path, config=config)
+    else:
+        model = AutoModelWithHeads.from_pretrained(args.model_name_or_path, config=config)
 
     # load pre-trained adapters
     if args.load_adapters is not None:
@@ -47,11 +77,12 @@ def create_model(args: ModelArguments, manager: DatasetManager):
         for name in args.load_adapters:
             del model.base_model.encoder.layer[11].output.layer_text_task_adapters[name]
 
-    model.add_prediction_head_from_config(
-        manager.name,
-        manager.get_prediction_head_config(),
-        overwrite_ok=True,
-    )
-    model.active_head = manager.name
+    if not use_classic_model_class:
+        model.add_prediction_head_from_config(
+            manager.name,
+            head_config,
+            overwrite_ok=True,
+        )
+        model.active_head = manager.name
 
     return model

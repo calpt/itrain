@@ -17,6 +17,9 @@ from .notifier import NOTIFIER_CLASSES
 from .runner import Runner, set_seed
 
 
+OUTPUT_FOLDER = os.environ.get("ITRAIN_OUTPUT") or "run_output"
+LOGS_FOLDER = os.environ.get("ITRAIN_LOGS") or "run_logs"
+
 logging.basicConfig(level=logging.INFO)
 transformers.logging.set_verbosity_info()
 logger = logging.getLogger(__name__)
@@ -70,16 +73,37 @@ class Setup:
     def notify(self, notifier_name: str, **kwargs):
         self._notifiers[notifier_name] = NOTIFIER_CLASSES[notifier_name](**kwargs)
 
-    def load_from_file(self, file):
+    def _override(self, instance, overrides):
+        orig_dict = dataclasses.asdict(instance)
+        for k in orig_dict.keys():
+            if k in overrides:
+                v = overrides.pop(k)
+                if v is not None:
+                    orig_dict[k] = v
+        return type(instance)(**orig_dict)
+
+    def load_from_file(self, file, overrides=None):
         with open(file, "r", encoding="utf-8") as f:
             config = json.load(f)
-        self.dataset(DatasetArguments(**config["dataset"]))
-        self.model(ModelArguments(**config["model"]))
+        dataset_args = DatasetArguments(**config["dataset"])
+        if overrides:
+            dataset_args = self._override(dataset_args, overrides)
+        self.dataset(dataset_args)
+        model_args = ModelArguments(**config["model"])
+        if overrides:
+            model_args = self._override(model_args, overrides)
+        self.model(model_args)
         if "training" in config:
-            self.training(RunArguments(**config["training"]))
+            train_args = RunArguments(**config["training"])
+            if overrides:
+                train_args = self._override(train_args, overrides)
+            self.training(train_args)
         if "evaluation" in config:
             if isinstance(config["evaluation"], dict):
-                self.evaluation(RunArguments(**config["evaluation"]))
+                eval_args = RunArguments(**config["evaluation"])
+                if overrides:
+                    eval_args = self._override(eval_args, overrides)
+                self.evaluation(eval_args)
             elif isinstance(config["evaluation"], str):
                 self.evaluation(split=config["evaluation"])
             elif config["evaluation"]:
@@ -98,11 +122,11 @@ class Setup:
     def _prepare_run_args(self, args: RunArguments, restart=None):
         if not args.output_dir:
             args.output_dir = os.path.join(
-                "run_output", self.model_instance.config.model_type, self.name, str(self.id)
+                OUTPUT_FOLDER, self.model_instance.config.model_type, self.name, str(self.id)
             )
         if not args.logging_dir:
             args.logging_dir = os.path.join(
-                "run_logs", "_".join([str(self.id), self.model_instance.config.model_type, self.name])
+                LOGS_FOLDER, "_".join([str(self.id), self.model_instance.config.model_type, self.name])
             )
         # create a copy with the run-specific adjustments
         prepared_args = RunArguments(**dataclasses.asdict(args))
@@ -150,7 +174,12 @@ class Setup:
             all_results["seeds"].append(seed)
 
             # Set up model
-            self.model_instance = create_model(self.model_args, self.dataset_manager)
+            is_full_finetuning = not self.model_args.train_adapter and self.model_args.train_adapter_fusion is None
+            self.model_instance = create_model(
+                self.model_args,
+                self.dataset_manager,
+                use_classic_model_class=is_full_finetuning,
+            )
 
             # Configure and run training
             if self._train_run_args:
@@ -159,8 +188,7 @@ class Setup:
                     self.model_instance,
                     train_run_args,
                     self.dataset_manager,
-                    do_save_full_model=not self.model_args.train_adapter
-                    and self.model_args.train_adapter_fusion is None,
+                    do_save_full_model=is_full_finetuning,
                     do_save_adapters=self.model_args.train_adapter,
                     do_save_adapter_fusion=self.model_args.train_adapter_fusion is not None,
                 )
@@ -175,6 +203,9 @@ class Setup:
                         if os.path.isdir(self.model_args.model_name_or_path)
                         else None
                     )
+                    # only save the final model if we don't use early stopping
+                    if train_run_args.patience <= 0:
+                        runner.save_model()
                 except Exception as ex:
                     for notifier in self._notifiers.values():
                         notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
@@ -219,8 +250,7 @@ class Setup:
                     self.model_instance,
                     eval_run_args,
                     self.dataset_manager,
-                    do_save_full_model=not self.model_args.train_adapter
-                    and self.model_args.train_adapter_fusion is None,
+                    do_save_full_model=is_full_finetuning,
                     do_save_adapters=self.model_args.train_adapter,
                     do_save_adapter_fusion=self.model_args.train_adapter_fusion is not None,
                 )
@@ -278,17 +308,25 @@ def main():
     restarts_group = parser.add_mutually_exclusive_group()
     restarts_group.add_argument("--seeds", type=lambda s: [int(item) for item in s.split(",")])
     restarts_group.add_argument("--restarts", type=int, default=None)
+    # add arguments from dataclasses
+    for dtype in (DatasetArguments, ModelArguments, RunArguments):
+        for field in dataclasses.fields(dtype):
+            field_name = f"--{field.name}"
+            kwargs = field.metadata.copy()
+            kwargs["type"] = field.type
+            kwargs["default"] = None
+            parser.add_argument(field_name, **kwargs)
 
-    args = parser.parse_args()
+    args = vars(parser.parse_args())
 
     # Load and run
-    setup = Setup(id=args.id)
-    setup.load_from_file(args.config)
-    if args.preprocess_only:
+    setup = Setup(id=args.pop("id"))
+    setup.load_from_file(args.pop("config"), overrides=args)
+    if args.pop("preprocess_only"):
         setup._setup_tokenizer()
         setup.dataset_manager.load_and_preprocess(CacheMode.USE_DATASET_NEW_FEATURES)
     else:
-        setup.run(restarts=args.seeds or args.restarts)
+        setup.run(restarts=args.pop("seeds") or args.pop("restarts"))
 
 
 if __name__ == "__main__":

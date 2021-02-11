@@ -6,19 +6,31 @@ from typing import Any, Dict, List, Optional
 import torch
 
 
+# from https://github.com/huggingface/transformers/blob/8e13b7359388882d93af5fe312efe56b6556fa23/src/transformers/hf_argparser.py#L29
+def string_to_bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise TypeError(
+            f"Truthy value expected: got {v} but expected one of yes/no, true/false, t/f, y/n, 1/0 (case insensitive)."
+        )
+
+
 @dataclass
 class DatasetArguments:
 
-    dataset_name: str = field(metadata={"help": "Name of the dataset to be loaded."})
+    dataset_name: str = field(default=None, metadata={"help": "Name of the dataset to be loaded."})
     task_name: Optional[str] = field(
         default=None,
         metadata={"help": "Name of the task or configuration to be loaded."},
     )
     dataset_dir: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "Path to a local loading script to optionally load a local dataset."
-        },
+        metadata={"help": "Path to a local loading script to optionally load a local dataset."},
     )
     max_seq_length: Optional[int] = field(
         default=None,
@@ -32,14 +44,14 @@ class DatasetArguments:
         metadata={
             "help": "How much stride to take between chunks when splitting up a long document."
             "Currently only used for QA tasks."
-        }
+        },
     )
     train_subset_size: int = field(
         default=-1,
         metadata={
             "help": "Limit the number of training examples."
             "If the limit is greater than the training set size or < 0, all examples will be used."
-        }
+        },
     )
 
     @property
@@ -58,7 +70,7 @@ class DatasetArguments:
 class ModelArguments:
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        default=None, metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -66,11 +78,11 @@ class ModelArguments:
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    use_fast_tokenizer: bool = field(
+    use_fast_tokenizer: string_to_bool = field(
         default=False,
         metadata={"help": "Specifies whether to use Hugginface's Fast Tokenizers."},
     )
-    train_adapter: bool = field(
+    train_adapter: string_to_bool = field(
         default=False,
         metadata={"help": "Train an adapter instead of the full model."},
     )
@@ -86,7 +98,7 @@ class ModelArguments:
         default=None,
         metadata={"help": "Train AdapterFusion between the specified adapters instead of the full model."},
     )
-    drop_last_fusion_layer: bool = False
+    drop_last_fusion_layer: string_to_bool = False
 
 
 @dataclass
@@ -97,7 +109,7 @@ class RunArguments:
         metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
     )
 
-    evaluate_during_training: bool = field(
+    evaluate_during_training: string_to_bool = field(
         default=True,
         metadata={"help": "Run evaluation during training after each epoch."},
     )
@@ -107,7 +119,9 @@ class RunArguments:
             "help": "If > 0 stops training after evaluating this many times consecutively with non-decreasing loss."
         },
     )
-    patience_metric: str = field(default="eval_loss", metadata={"help": "Metric used for early stopping. Loss by default."})
+    patience_metric: str = field(
+        default="eval_loss", metadata={"help": "Metric used for early stopping. Loss by default."}
+    )
 
     batch_size: int = field(default=16, metadata={"help": "Batch size."})
 
