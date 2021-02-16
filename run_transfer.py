@@ -2,37 +2,17 @@ import argparse
 import json
 import os
 
-from itrain import DATASET_MANAGER_CLASSES, DatasetArguments, ModelArguments, RunArguments, Setup
+from itrain import ModelArguments, RunArguments, Setup
+from utils import get_dataset_config, restore_path
 
 
 TRANSFER_OUTPUT_DIR="transfer_output"
 FUSION_OUTPUT_DIR="fusion_output"
-RUN_CONFIGS="run_configs"
-
-def _get_dataset_config(config_name, train_size=-1):
-    # init setup
-    with open(os.path.join(RUN_CONFIGS, config_name+".json"), "r", encoding="utf-8") as f:
-        config = json.load(f)
-    # dataset manager
-    config["dataset"]["train_subset_size"] = train_size
-    dataset_args = DatasetArguments(**config["dataset"])
-    dataset_manager = DATASET_MANAGER_CLASSES[dataset_args.dataset_name](dataset_args)
-    return dataset_manager, config
-
-
-def _restore_path(adapter_map, task_name, manager):
-    template = adapter_map["source_path_format"]
-    run_id = adapter_map["adapters"][task_name]
-    # HACK: the actual path to the adapter may have different names
-    path = os.path.expanduser(template.format(task_name, run_id, manager.name))
-    if not os.path.exists(path):
-        path = os.path.expanduser(template.format(manager.name, run_id, manager.name))
-    return path
 
 
 def run_seq_finetuning(args):
     # init setup
-    dataset_manager, config = _get_dataset_config(args["target_task"], train_size=args["train_size"])
+    dataset_manager, config = get_dataset_config(args["target_task"], train_size=args["train_size"])
     if args["train_size"] > 0:
         target_task_name = args["target_task"] + "_n" + str(args["train_size"])
     else:
@@ -61,7 +41,7 @@ def run_seq_finetuning(args):
             print(f"Skipping task {task_name} as it already exists.")
             continue
 
-        pre_training_dataset_manager, _ = _get_dataset_config(task_name)
+        pre_training_dataset_manager, _ = get_dataset_config(task_name)
         setup = Setup(id=args["id"])
         setup.dataset(dataset_manager)
         config["training"]["output_dir"] = output_dir
@@ -74,7 +54,7 @@ def run_seq_finetuning(args):
         setup._config_name = "transfer_" + task_name + "_to_" + target_task_name
         # setup model
         config["model"]["load_adapters"] = {
-            dataset_manager.name: _restore_path(trained_adapter_map, task_name, pre_training_dataset_manager)
+            dataset_manager.name: restore_path(trained_adapter_map, task_name, pre_training_dataset_manager)
         }
         setup.model(ModelArguments(**config["model"]))
         # start!
