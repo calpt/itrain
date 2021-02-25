@@ -4,7 +4,7 @@ import os
 from itrain import DATASET_MANAGER_CLASSES, DatasetArguments
 
 
-RUN_CONFIGS="run_configs"
+RUN_CONFIGS=os.path.expanduser("~/itrain/run_configs")
 
 
 def get_dataset_config(config_name, train_size=-1):

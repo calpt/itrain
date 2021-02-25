@@ -227,7 +227,7 @@ class Setup:
                         for adapter_name in self.model_instance.config.adapters.adapters:
                             path = os.path.join(best_model_dir, adapter_name)
                             self.model_instance.load_adapter(path)
-                    elif self.model_args.train_adapter_fusion is not None:
+                    if self.model_args.train_adapter_fusion is not None:
                         path = os.path.join(best_model_dir, self.model_args.train_adapter_fusion)
                         # HACK: adapter-transformers refuses to overwrite existing adapter_fusion config
                         del self.model_instance.config.adapter_fusion
@@ -235,7 +235,7 @@ class Setup:
                         # HACK: also reload the prediction head
                         head_path = os.path.join(best_model_dir, self.dataset_manager.name)
                         self.model_instance.load_head(head_path)
-                    else:
+                    if is_full_finetuning:
                         self.model_instance = self.model_instance.from_pretrained(best_model_dir)
                         self.model_instance.active_head = self.dataset_manager.name
             else:

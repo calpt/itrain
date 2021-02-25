@@ -7,16 +7,20 @@ from utils import get_dataset_config, restore_path
 
 
 FUSION_OUTPUT_DIR = "fusion_output"
+FUSION_FINETUNE_OUTPUT_DIR = "fusion_finetune_output"
 
 
-def run_fusion(args):
+def run_fusion(args, config_name=None):
     # init setup
     dataset_manager, config = get_dataset_config(args["target_task"], train_size=args["train_size"])
     if args["train_size"] > 0:
         target_task_name = args["target_task"] + "_n" + str(args["train_size"])
     else:
         target_task_name = args["target_task"]
-    output_base = os.path.join(FUSION_OUTPUT_DIR, "to_" + target_task_name)
+    if args["finetune_adapters"]:
+        output_base = os.path.join(FUSION_FINETUNE_OUTPUT_DIR, "to_" + target_task_name)
+    else:
+        output_base = os.path.join(FUSION_OUTPUT_DIR, "to_" + target_task_name)
     # patch training args
     config["training"]["learning_rate"] = args["learning_rate"]
     config["training"]["num_train_epochs"] = args["num_train_epochs"]
@@ -29,8 +33,8 @@ def run_fusion(args):
     else:
         results = {}
 
-    with open(args["trained_adapter_map"], "r") as f:
-        trained_adapter_map = json.load(f)
+    with open(os.path.expanduser(args["task_map"]), "r") as f:
+        task_map = json.load(f)
 
     fusion_name = ",".join(args["source_tasks"])
     print(f"*** Running fusion from {fusion_name} to {target_task_name} ***")
@@ -50,7 +54,7 @@ def run_fusion(args):
     else:
         setup.evaluation()
     setup.notify(config["notify"])
-    setup._config_name = "fusion_" + fusion_name + "_to_" + target_task_name
+    setup._config_name = config_name or "fusion_" + fusion_name + "_to_" + target_task_name
 
     # setup model
     load_adapters_map = {}
@@ -58,13 +62,13 @@ def run_fusion(args):
     for source_task in args["source_tasks"]:
         source_dataset_manager, _ = get_dataset_config(source_task)
         load_adapters_map[source_task] = restore_path(
-            trained_adapter_map, source_task, source_dataset_manager
+            task_map, source_task, source_dataset_manager
         )
     # patch model args
-    config["model"]["train_adapter"] = False
     config["model"]["load_adapters"] = load_adapters_map
     config["model"]["train_adapter_fusion"] = fusion_name
     config["model"]["drop_last_fusion_layer"] = True
+    config["model"]["train_adapter"] = args["finetune_adapters"]
     setup.model(ModelArguments(**config["model"]))
     # start!
     if fusion_name in results and args["overwrite_mode"] == 1:
@@ -86,7 +90,7 @@ if __name__ == "__main__":
 
     parser.add_argument("target_task", type=str, help="Name of the target task training setup.")
     parser.add_argument("--id", type=int, default=0, help="ID of this run.")
-    parser.add_argument("--trained_adapter_map", type=str, required=True)
+    parser.add_argument("--task_map", type=str, required=True)
     parser.add_argument(
         "--overwrite_mode", type=int, choices=[0, 1, 2], default=0, help="0: no overwrite; 1: append; 2: overwrite"
     )
@@ -95,6 +99,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_train_epochs", type=int, default=15)
     parser.add_argument("--train_size", type=int, default=-1)
     parser.add_argument("--restarts", type=int, default=None)
+    parser.add_argument("--finetune_adapters", action="store_true")
     args = vars(parser.parse_args())
 
     run_fusion(args)

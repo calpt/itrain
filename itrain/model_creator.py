@@ -58,10 +58,10 @@ def create_model(args: ModelArguments, manager: DatasetManager, use_classic_mode
             for adapter in args.load_adapters:
                 model.load_adapter(adapter, config=adapter_config)
 
-    if args.train_adapter and args.train_adapter_fusion is not None:
-        raise ValueError("train_adapter cannot be set together with train_adapter_fusion.")
+    # if args.train_adapter and args.train_adapter_fusion is not None:
+    #     raise ValueError("train_adapter cannot be set together with train_adapter_fusion.")
     # setup adapters
-    if args.train_adapter:
+    if args.train_adapter and args.train_adapter_fusion is None:
         # if adapter was already loaded, train the loaded adapter
         if manager.name not in model.config.adapters.adapters:
             adapter_config = AdapterConfig.load(args.adapter_config)
@@ -76,6 +76,10 @@ def create_model(args: ModelArguments, manager: DatasetManager, use_classic_mode
         del model.base_model.encoder.layer[11].output.adapter_fusion_layer[args.train_adapter_fusion]
         for name in args.load_adapters:
             del model.base_model.encoder.layer[11].output.layer_text_task_adapters[name]
+    # unfreeze fused adapters
+    if args.train_adapter_fusion is not None and args.train_adapter:
+        # HACK: this only works for BERT-based models
+        model.base_model.encoder.enable_adapters(args.train_adapter_fusion, True, True)
 
     if not use_classic_model_class:
         model.add_prediction_head_from_config(
