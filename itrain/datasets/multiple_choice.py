@@ -84,6 +84,8 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
         return encoded
 
     def compute_metrics(self, predictions, references):
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
         predictions = np.argmax(predictions, axis=1)
         return {"accuracy": (predictions == references).mean()}
 

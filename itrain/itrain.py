@@ -11,8 +11,7 @@ from transformers import PreTrainedModel
 
 from .arguments import DatasetArguments, ModelArguments, RunArguments
 from .datasets import DATASET_MANAGER_CLASSES, CacheMode, DatasetManager
-from .datasets.tagging import TaggingDatasetManager
-from .model_creator import create_model, create_tokenizer
+from .model_creator import create_model, create_tokenizer, register_heads
 from .notifier import NOTIFIER_CLASSES
 from .runner import Runner, set_seed
 
@@ -113,11 +112,10 @@ class Setup:
         self._config_name = os.path.splitext(os.path.basename(file))[0]
 
     def _setup_tokenizer(self):
-        # HACK: when using e.g. Roberta with sequence tagging, we need to set add_prefix_space
-        kwargs = {}
-        if isinstance(self.dataset_manager, TaggingDatasetManager):
-            kwargs["add_prefix_space"] = True
-        self.dataset_manager.tokenizer = create_tokenizer(self.model_args, **kwargs)
+        self.dataset_manager.tokenizer = create_tokenizer(
+            self.model_args,
+            **self.dataset_manager.get_tokenizer_config_kwargs(),
+        )
 
     def _prepare_run_args(self, args: RunArguments, restart=None):
         if not args.output_dir:
@@ -237,6 +235,7 @@ class Setup:
                         self.model_instance.load_head(head_path)
                     if is_full_finetuning:
                         self.model_instance = self.model_instance.from_pretrained(best_model_dir)
+                        register_heads(self.model_instance)
                         self.model_instance.active_head = self.dataset_manager.name
             else:
                 epoch = None

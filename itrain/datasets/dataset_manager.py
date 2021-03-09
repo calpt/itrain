@@ -104,6 +104,12 @@ class DatasetManager(ABC):
     def test_split(self):
         return self.dataset[self.test_split_name] if self.test_split_name in self.dataset else None
 
+    def get_tokenizer_config_kwargs(self):
+        return {}
+
+    def get_model_config_kwargs(self):
+        return {}
+
     @abstractmethod
     def get_prediction_head_config(self):
         pass
@@ -121,6 +127,7 @@ class DatasetManagerBase(DatasetManager):
         self._default_subset_name = None
         self._padding = "max_length"
         self._truncation = True
+        self._encode_remove_columns = False
         self.load_metric = load_metric
 
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
@@ -174,8 +181,14 @@ class DatasetManagerBase(DatasetManager):
         cache_files = {}
         for split_name in self.dataset.keys():
             cache_files[split_name] = self._get_features_cache_file(split_name)
+        # HACK: currently expects columns in all splits to be identical
+        remove_columns = self.dataset.column_names[self.train_split_name] if self._encode_remove_columns else None
         self.dataset = self.dataset.map(
-            self.encode_batch, batched=True, cache_file_names=cache_files, load_from_cache_file=load_from_cache
+            self.encode_batch,
+            batched=True,
+            cache_file_names=cache_files,
+            load_from_cache_file=load_from_cache,
+            remove_columns=remove_columns,
         )
         self.dataset.set_format(columns=["input_ids"] + self.label_column_names + self.tokenizer.model_input_names)
 
@@ -183,4 +196,6 @@ class DatasetManagerBase(DatasetManager):
         return default_data_collator(features)
 
     def compute_metrics(self, predictions, references):
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
         return self.metric.compute(predictions=predictions, references=references)

@@ -1,7 +1,8 @@
 {
     "dataset": {
-        "dataset_name": "conll2003",
-        "task_name": "ner"
+        "dataset_name": "ud_pos",
+        "task_name": "en_ewt",
+        "dataset_dir": "~/itrain/datasets/universal_dependencies.py"
     },
     "model": {
         "model_name_or_path": "roberta-base",
@@ -11,7 +12,7 @@
     },
     "training": {
         "learning_rate": 1e-4,
-        "batch_size": 16,
+        "batch_size": 32,
         "num_train_epochs": 15,
         "patience": 4,
         "patience_metric": "eval_accuracy"

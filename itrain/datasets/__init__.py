@@ -38,7 +38,7 @@ from .qa import (
     SquadV2Manager,
     WikiHopManager,
 )
-from .tagging import CoNLLManager, FCEErrorDetectionManager, TaggingDatasetManager
+from .tagging import FCEErrorDetectionManager, TaggingDatasetManager
 
 
 DATASET_MANAGER_CLASSES = {
@@ -82,9 +82,11 @@ DATASET_MANAGER_CLASSES = {
     "duorc_p": DuoRCParaphraseManager,
     "duorc_s": DuoRCSelfManager,
     "quoref": QuorefManager,
-    "conll2000": CoNLLManager,
-    "conll2003": CoNLLManager,
-    "universal_dependencies": TaggingDatasetManager,
+    "conll2000": TaggingDatasetManager,
+    "conll2003": TaggingDatasetManager,
+    "ud_pos": TaggingDatasetManager,
     "fce_error_detection": FCEErrorDetectionManager,
     "pmb_sem_tagging": TaggingDatasetManager,
+    "wnut_17": TaggingDatasetManager,
+    "mit_movie": TaggingDatasetManager,
 }

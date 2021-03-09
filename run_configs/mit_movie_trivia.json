@@ -1,8 +1,8 @@
 {
     "dataset": {
-        "dataset_name": "universal_dependencies",
-        "task_name": "en_ewt",
-        "dataset_dir": "~/itrain/datasets/universal_dependencies.py"
+        "dataset_name": "mit_movie",
+        "task_name": "trivia",
+        "dataset_dir": "~/itrain/itrain/ext/datasets/mit_movie.py"
     },
     "model": {
         "model_name_or_path": "roberta-base",

@@ -90,6 +90,12 @@ class ModelArguments:
         default="pfeiffer",
         metadata={"help": "Adapter configuration. Either an identifier or a path to a file."},
     )
+    adapter_non_linearity: Optional[str] = field(
+        default=None, metadata={"help": "Override the non-linearity of the adapter configuration."}
+    )
+    adapter_reduction_factor: Optional[int] = field(
+        default=None, metadata={"help": "Override the reduction factor of the adapter configuration."}
+    )
     load_adapters: Optional[List[str]] = field(
         default=None,
         metadata={"help": "List of pre-trained adapters to be loaded."},

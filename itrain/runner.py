@@ -35,6 +35,24 @@ def set_seed(seed: int):
     return seed
 
 
+def _pad_and_concatenate(array1, array2, padding_index=-100):
+    """Fixed from trainer_pt_utils.py"""
+    if isinstance(array1, (list, tuple)):
+        return type(array1)(_pad_and_concatenate(t, n, padding_index=padding_index) for t, n in zip(array1, array2))
+    else:
+        if len(array1.shape) == 1 or array1.shape[1] == array2.shape[1]:
+            return np.concatenate((array1, array2), axis=0)
+
+        # Let's figure out the new shape
+        new_shape = (array1.shape[0] + array2.shape[0], max(array1.shape[1], array2.shape[1])) + array1.shape[2:]
+
+        # Now let's fill the result tensor
+        result = np.full_like(array1, padding_index, shape=new_shape)
+        result[: array1.shape[0], : array1.shape[1]] = array1
+        result[array1.shape[0] :, : array2.shape[1]] = array2
+        return result
+
+
 class TrainingOutput(NamedTuple):
     global_step: int
     epoch: float
@@ -481,8 +499,8 @@ class Runner:
         logger.info("  Num examples = %d", len(dataloader.dataset))
         logger.info("  Batch size = %d", batch_size)
         eval_losses: List[float] = []
-        preds: torch.Tensor = None
-        label_ids: torch.Tensor = None
+        preds = None
+        label_ids = None
         model.eval()
 
         if self.args.past_index >= 0:
@@ -494,19 +512,21 @@ class Runner:
             if loss is not None:
                 eval_losses.extend([loss] * batch_size)
             if logits is not None:
-                preds = logits if preds is None else nested_concat(preds, logits, padding_index=-100)
+                preds = (
+                    nested_numpify(logits)
+                    if preds is None
+                    else _pad_and_concatenate(preds, nested_numpify(logits), padding_index=-100)
+                )
             if labels is not None:
-                label_ids = labels if label_ids is None else nested_concat(label_ids, labels, padding_index=-100)
+                label_ids = (
+                    nested_numpify(labels)
+                    if label_ids is None
+                    else _pad_and_concatenate(label_ids, nested_numpify(labels), padding_index=-100)
+                )
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
             delattr(self, "_past")
-
-        # Finally, turn the aggregated tensors into numpy arrays.
-        if preds is not None:
-            preds = nested_numpify(preds)
-        if label_ids is not None:
-            label_ids = nested_numpify(label_ids)
 
         if preds is not None and label_ids is not None or self.dataset_manager.always_call_metrics:
             metrics = self.dataset_manager.compute_metrics(preds, label_ids)

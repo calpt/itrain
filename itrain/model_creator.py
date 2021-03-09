@@ -32,6 +32,12 @@ def create_tokenizer(args: ModelArguments, **kwargs):
     )
 
 
+def register_heads(model):
+    # TODO currently no custom heads
+    pass
+    # model.register_custom_head("dependency_parsing", BiaffineParsingHead)
+
+
 # TODO check full fine-tuning with flex heads
 def create_model(args: ModelArguments, manager: DatasetManager, use_classic_model_class=False):
     head_config = manager.get_prediction_head_config()
@@ -39,7 +45,9 @@ def create_model(args: ModelArguments, manager: DatasetManager, use_classic_mode
         head_config["num_choices"] if head_config["head_type"] == "multiple_choice" else head_config["num_labels"]
     )
     config = AutoConfig.from_pretrained(
-        args.config_name if args.config_name else args.model_name_or_path, num_labels=num_labels
+        args.config_name if args.config_name else args.model_name_or_path,
+        num_labels=num_labels,
+        **manager.get_model_config_kwargs(),
     )
 
     if use_classic_model_class:
@@ -47,10 +55,15 @@ def create_model(args: ModelArguments, manager: DatasetManager, use_classic_mode
         model = HEAD_TO_CLASSIC_MODEL_MAP[head_type].from_pretrained(args.model_name_or_path, config=config)
     else:
         model = AutoModelWithHeads.from_pretrained(args.model_name_or_path, config=config)
+    register_heads(model)
 
     # load pre-trained adapters
     if args.load_adapters is not None:
-        adapter_config = AdapterConfig.load(args.adapter_config)
+        adapter_config = AdapterConfig.load(
+            args.adapter_config,
+            non_linearity=args.adapter_non_linearity,
+            reduction_factor=args.adapter_reduction_factor,
+        )
         if isinstance(args.load_adapters, Mapping):
             for name, adapter in args.load_adapters.items():
                 model.load_adapter(adapter, config=adapter_config, load_as=name)

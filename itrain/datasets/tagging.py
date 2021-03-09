@@ -22,10 +22,28 @@ class TaggingDatasetManager(DatasetManagerBase):
     ):
         super().__init__(args, tokenizer, load_metric=False)
         self._padding = False
+        self._use_seqeval = False
         self.column_config = column_config or self._get_column_config()
 
     def _get_column_config(self):
-        if self.args.dataset_name == "universal_dependencies":
+        if self.args.dataset_name == "conll2003":
+            self._use_task_name_for_loading = False
+            if self.args.task_name == "ner":
+                self._use_seqeval = True
+                return ColumnConfig("tokens", "ner_tags")
+            elif self.args.task_name == "pos":
+                return ColumnConfig("tokens", "pos_tags")
+        elif self.args.dataset_name == "conll2000":
+            self._use_seqeval = True
+            return ColumnConfig("tokens", "chunk_tags")
+        elif self.args.dataset_name == "wnut_17":
+            self._use_seqeval = True
+            return ColumnConfig("tokens", "ner_tags")
+        elif self.args.dataset_name == "mit_movie":
+            self._use_seqeval = True
+            self._use_task_name_for_loading = True
+            return ColumnConfig("tokens", "ner_tags")
+        elif self.args.dataset_name == "ud_pos":
             return ColumnConfig("tokens", "upos")
         elif self.args.dataset_name == "pmb_sem_tagging":
             self.train_split_name = "silver"
@@ -85,58 +103,9 @@ class TaggingDatasetManager(DatasetManagerBase):
         tokenized_inputs["labels"] = labels
         return tokenized_inputs
 
-    def compute_metrics(self, predictions, references):
-        predictions = np.argmax(predictions, axis=2)
-
-        # Remove ignored index (special tokens)
-        true_predictions = [
-            self.label_list[p]
-            for prediction, label in zip(predictions, references)
-            for (p, l) in zip(prediction, label)
-            if l != -100
-        ]
-        true_labels = [
-            self.label_list[l]
-            for prediction, label in zip(predictions, references)
-            for (p, l) in zip(prediction, label)
-            if l != -100
-        ]
-        # calculate the weighted macro (per-tag) precision, recall & f1-score
-        accuracy = accuracy_score(true_labels, true_predictions)
-        precision, recall, f1, _ = precision_recall_fscore_support(
-            true_labels,
-            true_predictions,
-            average="weighted",
-        )
-        return {
-            "accuracy": accuracy,
-            "precision": precision,
-            "recall": recall,
-            "f1": f1,
-        }
-
-    def get_prediction_head_config(self):
-        return {
-            "head_type": "tagging",
-            "num_labels": len(self.label_list),
-            "layers": 1,
-            "activation_function": "tanh",
-            "label2id": {v: k for k, v in enumerate(self.label_list)},
-        }
-
-
-class CoNLLManager(TaggingDatasetManager):
-    def _get_column_config(self):
-        if self.args.dataset_name == "conll2003":
-            self._use_seqeval = True
-            return ColumnConfig("tokens", "ner_tags")
-        elif self.args.dataset_name == "conll2000":
-            self._use_seqeval = True
-            return ColumnConfig("tokens", "chunk_tags")
-        else:
-            raise ValueError("No ColumnConfig specified.")
-
-    def compute_metrics(self, predictions, references):
+    def _compute_metrics_seqeval(self, predictions, references):
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
         predictions = np.argmax(predictions, axis=2)
 
         # Remove ignored index (special tokens)
@@ -156,12 +125,61 @@ class CoNLLManager(TaggingDatasetManager):
             "f1": f1_score(true_labels, true_predictions),
         }
 
+    def compute_metrics(self, predictions, references):
+        if self._use_seqeval:
+            return self._compute_metrics_seqeval(predictions, references)
+        else:
+            if isinstance(predictions, tuple):
+                predictions = predictions[0]
+            predictions = np.argmax(predictions, axis=2)
+
+            # Remove ignored index (special tokens)
+            true_predictions = [
+                self.label_list[p]
+                for prediction, label in zip(predictions, references)
+                for (p, l) in zip(prediction, label)
+                if l != -100
+            ]
+            true_labels = [
+                self.label_list[l]
+                for prediction, label in zip(predictions, references)
+                for (p, l) in zip(prediction, label)
+                if l != -100
+            ]
+            # calculate the weighted macro (per-tag) precision, recall & f1-score
+            accuracy = accuracy_score(true_labels, true_predictions)
+            precision, recall, f1, _ = precision_recall_fscore_support(
+                true_labels,
+                true_predictions,
+                average="weighted",
+            )
+            return {
+                "accuracy": accuracy,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+            }
+
+    def get_tokenizer_config_kwargs(self):
+        return {"add_prefix_space": True}
+
+    def get_prediction_head_config(self):
+        return {
+            "head_type": "tagging",
+            "num_labels": len(self.label_list),
+            "layers": 1,
+            "activation_function": "tanh",
+            "label2id": {v: k for k, v in enumerate(self.label_list)},
+        }
+
 
 class FCEErrorDetectionManager(TaggingDatasetManager):
     def _get_column_config(self):
         return ColumnConfig("tokens", "labels")
 
     def compute_metrics(self, predictions, references):
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
         predictions = np.argmax(predictions, axis=2)
 
         # Remove ignored index (special tokens)

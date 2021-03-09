@@ -66,6 +66,7 @@ def run_seq_finetuning(args):
         else:
             run_results = setup.run(restarts=args["restarts"])
             results[task_name] = run_results
+        del setup
 
     # save results
     with open(final_results_file, "w") as f:

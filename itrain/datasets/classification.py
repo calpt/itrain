@@ -74,6 +74,8 @@ class ClassificationDatasetManager(DatasetManagerBase):
         return encoded
 
     def compute_metrics(self, predictions, references):
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
         predictions = np.argmax(predictions, axis=1)
         return {"accuracy": (predictions == references).mean()}
 
@@ -207,6 +209,8 @@ class GlueManager(ClassificationDatasetManager):
             raise ValueError()
 
     def compute_metrics(self, predictions, references):
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
         if self.args.task_name == "stsb":
             predictions = np.squeeze(predictions)
         else:
@@ -356,6 +360,8 @@ class SuperGlueManager(ClassificationDatasetManager):
         return encoded
 
     def compute_metrics(self, predictions, references):
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
         if self.args.task_name == "multirc":
             predictions = np.argmax(predictions, axis=1)
             predictions = [{"idx": idx, "prediction": pred} for idx, pred in zip(self.dev_split["idx"], predictions)]
