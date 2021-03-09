@@ -39,7 +39,17 @@
         "fce_error_detection": "49661",
         "wikihop": "50166",
         "pmb_sem_tagging": "50678",
-        "quoref": "52775"
+        "quoref": "52775",
+        "quartz": "46413",
+        "wic": "53664",
+        "scicite": "44514",
+        "anli_r3": "41465",
+        "trec": "46526",
+        "emotion": "41515",
+        "conll2000": "49619",
+        "conll2003_pos": "62706",
+        "wnut_17": "62764",
+        "mit_movie_trivia": "62807"
     },
     "from": [
         "ud_pos",
@@ -71,7 +81,19 @@
         "hotpotqa",
         "duorc_p",
         "squad",
-        "fce_error_detection"
+        "fce_error_detection",
+        "quartz",
+        "mrpc",
+        "wic",
+        "scicite",
+        "cola",
+        "anli_r3",
+        "trec",
+        "emotion",
+        "conll2000",
+        "conll2003_pos",
+        "wnut_17",
+        "mit_movie_trivia"
     ],
     "target_path_format": "~/itrain/limited_output/{0}/{1}/0/checkpoint-best/{2}",
     "to": {
@@ -84,6 +106,7 @@
         "stsb": "eval_spearmanr",
         "drop": "eval_f1",
         "quail": "eval_accuracy",
-        "boolq": "eval_accuracy"
+        "boolq": "eval_accuracy",
+        "ud_deprel": "eval_f1"
     }
 }

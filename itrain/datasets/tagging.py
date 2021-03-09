@@ -45,6 +45,8 @@ class TaggingDatasetManager(DatasetManagerBase):
             return ColumnConfig("tokens", "ner_tags")
         elif self.args.dataset_name == "ud_pos":
             return ColumnConfig("tokens", "upos")
+        elif self.args.dataset_name == "ud_deprel":
+            return ColumnConfig("tokens", "deprel")
         elif self.args.dataset_name == "pmb_sem_tagging":
             self.train_split_name = "silver"
             self.test_split_name = "gold"

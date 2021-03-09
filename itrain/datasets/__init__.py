@@ -85,6 +85,7 @@ DATASET_MANAGER_CLASSES = {
     "conll2000": TaggingDatasetManager,
     "conll2003": TaggingDatasetManager,
     "ud_pos": TaggingDatasetManager,
+    "ud_deprel": TaggingDatasetManager,
     "fce_error_detection": FCEErrorDetectionManager,
     "pmb_sem_tagging": TaggingDatasetManager,
     "wnut_17": TaggingDatasetManager,

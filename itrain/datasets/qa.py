@@ -312,8 +312,8 @@ class QADatasetManager(DatasetManager):
     def compute_metrics(self, predictions, references):
         squad_results = self._get_squad_results(predictions)
         predictions = compute_predictions_logits(
-            self.dev_split.examples,
-            self.dev_split.features,
+            self.dev_split.examples[:len(predictions[0])],
+            self.dev_split.features[:len(predictions[0])],
             squad_results,
             n_best_size=self.squad_args.n_best_size,
             max_answer_length=self.squad_args.max_answer_length,
@@ -326,7 +326,7 @@ class QADatasetManager(DatasetManager):
             null_score_diff_threshold=self.squad_args.null_score_diff_threshold,
             tokenizer=self.tokenizer,
         )
-        results = squad_evaluate(self.dev_split.examples, predictions)
+        results = squad_evaluate(self.dev_split.examples[:len(predictions)], predictions)
         return results
 
     def get_prediction_head_config(self):
