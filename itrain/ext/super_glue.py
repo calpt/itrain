@@ -65,6 +65,9 @@ def acc_and_f1(preds, labels, f1_avg="binary"):
 
 
 def evaluate_multirc(ids_preds, labels):
+    """
+    Computes F1 score and Exact Match for MultiRC predictions.
+    """
     question_map = {}
     for id_pred, label in zip(ids_preds, labels):
         question_id = "{}-{}".format(id_pred["idx"]["paragraph"], id_pred["idx"]["question"])
@@ -76,13 +79,14 @@ def evaluate_multirc(ids_preds, labels):
     f1s, ems = [], []
     for question, preds_labels in question_map.items():
         question_preds, question_labels = zip(*preds_labels)
-        f1 = f1_score(y_true=question_labels, y_pred=question_preds)
+        f1 = f1_score(y_true=question_labels, y_pred=question_preds, average="macro")
         f1s.append(f1)
         em = int(sum([p == l for p, l in preds_labels]) == len(preds_labels))
         ems.append(em)
-    avg_f1 = sum(f1s) / len(f1s)
-    avg_em = sum(ems) / len(ems)
-    return {"f1": avg_f1, "em": avg_em}
+    f1_m = sum(f1s) / len(f1s)
+    em = sum(ems) / len(ems)
+    f1_a = f1_score(y_true=labels, y_pred=[id_pred["prediction"] for id_pred in ids_preds])
+    return {"exact_match": em, "f1_m": f1_m, "f1_a": f1_a}
 
 
 class SuperGlue(datasets.Metric):

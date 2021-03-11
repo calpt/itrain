@@ -3,7 +3,6 @@
 from .classification import (
     ANLIManager,
     ClassificationDatasetManager,
-    EmotionDatasetManager,
     GlueManager,
     SciTailManager,
     SuperGlueManager,
@@ -45,6 +44,7 @@ DATASET_MANAGER_CLASSES = {
     "imdb": ClassificationDatasetManager,
     "rotten_tomatoes": ClassificationDatasetManager,
     "emo": ClassificationDatasetManager,
+    "emotion": ClassificationDatasetManager,
     "yelp_polarity": ClassificationDatasetManager,
     "scicite": ClassificationDatasetManager,
     "trec": ClassificationDatasetManager,
@@ -54,7 +54,6 @@ DATASET_MANAGER_CLASSES = {
     "wiki_qa": WikiQAManager,
     "scitail": SciTailManager,
     "anli": ANLIManager,
-    "emotion": EmotionDatasetManager,
     "glue": GlueManager,
     "super_glue": SuperGlueManager,
     "copa": COPAManager,

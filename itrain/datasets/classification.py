@@ -16,6 +16,7 @@ class ClassificationDatasetManager(DatasetManagerBase):
         "imdb": 2,
         "rotten_tomatoes": 2,
         "emo": 4,
+        "emotion": 6,
         "yelp_polarity": 2,
         "scicite": 3,
         "snli": 3,
@@ -146,27 +147,6 @@ class ANLIManager(ClassificationDatasetManager):
             return concatenate_datasets([self.dataset["train_r1"], self.dataset["train_r2"], self.dataset["train_r3"]])
         else:
             raise ValueError("Invalid task_name")
-
-
-class EmotionDatasetManager(ClassificationDatasetManager):
-    tasks_num_labels = {
-        "emotion": 6,
-    }
-
-    emotion_label2id = {
-        "sadness": 0,
-        "joy": 1,
-        "love": 2,
-        "anger": 3,
-        "fear": 4,
-        "surprise": 5,
-    }
-
-    def _map_labels(self, examples):
-        return [self.emotion_label2id[label] for label in examples[self.column_config.label]]
-
-    def _custom_filter(self, example):
-        return example[self.column_config.label] in self.emotion_label2id
 
 
 class GlueManager(ClassificationDatasetManager):
