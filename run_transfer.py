@@ -6,8 +6,9 @@ from itrain import ModelArguments, RunArguments, Setup
 from utils import get_dataset_config, restore_path
 
 
-TRANSFER_OUTPUT_DIR="transfer_output"
-FUSION_OUTPUT_DIR="fusion_output"
+TRANSFER_OUTPUT_DIR = "transfer_output"
+TRANSFER_OUTPUT_DIR_FULL_MODEL = "full_transfer_output"
+FUSION_OUTPUT_DIR = "fusion_output"
 
 
 def run_seq_finetuning(args):
@@ -17,10 +18,21 @@ def run_seq_finetuning(args):
         target_task_name = args["target_task"] + "_n" + str(args["train_size"])
     else:
         target_task_name = args["target_task"]
-    output_base = os.path.join(TRANSFER_OUTPUT_DIR, "to_" + target_task_name)
+    if args["full_model"]:
+        output_base = os.path.join(TRANSFER_OUTPUT_DIR_FULL_MODEL, "to_" + target_task_name)
+    else:
+        output_base = os.path.join(TRANSFER_OUTPUT_DIR, "to_" + target_task_name)
     # patch model/ training args
-    config["training"]["learning_rate"] = args["learning_rate"] or 1e-4
-    config["training"]["num_train_epochs"] = args["num_train_epochs"]
+    if args["full_model"]:
+        config["model"]["train_adapter"] = False
+        config["training"]["patience"] = 0
+        default_lr = 3e-5
+        default_epochs = 3
+    else:
+        default_lr = 1e-4
+        default_epochs = 15
+    config["training"]["learning_rate"] = args["learning_rate"] or default_lr
+    config["training"]["num_train_epochs"] = args["num_train_epochs"] or default_epochs
 
     # load results if existing
     final_results_file = os.path.join(output_base, "eval_results.json")
@@ -53,9 +65,18 @@ def run_seq_finetuning(args):
         setup.notify(config["notify"])
         setup._config_name = "transfer_" + task_name + "_to_" + target_task_name
         # setup model
-        config["model"]["load_adapters"] = {
-            dataset_manager.name: restore_path(trained_adapter_map, task_name, pre_training_dataset_manager)
-        }
+        if args["full_model"]:
+            if not config["model"].get("tokenizer_name", None):
+                # HACK in case the tokenizer is not saved with the model
+                config["model"]["tokenizer_name"] = config["model"]["model_name_or_path"]
+            config["model"]["model_name_or_path"] = restore_path(
+                trained_adapter_map, task_name, pre_training_dataset_manager
+            )
+            config["model"]["drop_model_head"] = True
+        else:
+            config["model"]["load_adapters"] = {
+                dataset_manager.name: restore_path(trained_adapter_map, task_name, pre_training_dataset_manager)
+            }
         setup.model(ModelArguments(**config["model"]))
         # start!
         if task_name in results and args["overwrite_mode"] == 1:
@@ -119,12 +140,15 @@ if __name__ == "__main__":
     parser.add_argument("target_task", type=str, help="Name of the target task training setup.")
     parser.add_argument("--id", type=int, default=0, help="ID of this run.")
     parser.add_argument("--trained_adapter_map", type=str, required=True)
-    parser.add_argument("--overwrite_mode", type=int, choices=[0, 1, 2], default=0, help="0: no overwrite; 1: append; 2: overwrite")
+    parser.add_argument(
+        "--overwrite_mode", type=int, choices=[0, 1, 2], default=0, help="0: no overwrite; 1: append; 2: overwrite"
+    )
     parser.add_argument("--fusion", action="store_true", default=False)
     parser.add_argument("--learning_rate", type=float, default=None)
-    parser.add_argument("--num_train_epochs", type=int, default=15)
+    parser.add_argument("--num_train_epochs", type=int, default=None)
     parser.add_argument("--train_size", type=int, default=-1)
     parser.add_argument("--restarts", type=int, default=None)
+    parser.add_argument("--full_model", action="store_true")
     args = vars(parser.parse_args())
 
     fusion = args.pop("fusion")

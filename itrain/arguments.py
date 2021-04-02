@@ -105,6 +105,7 @@ class ModelArguments:
         metadata={"help": "Train AdapterFusion between the specified adapters instead of the full model."},
     )
     drop_last_fusion_layer: string_to_bool = False
+    drop_model_head: string_to_bool = False
 
 
 @dataclass

@@ -15,7 +15,7 @@ def _patch_run_config_adapter(config):
     config["training"]["checkpoint_steps"] = 100
 
 
-def _patch_run_config_finetune(config):
+def _patch_run_config_full_model(config):
     config["model"]["train_adapter"] = False
     config["training"]["learning_rate"] = 3e-5
     config["training"]["num_train_epochs"] = 3
@@ -27,15 +27,15 @@ def run_limited_training(args):
     # load training config
     with open(os.path.join(RUN_CONFIGS, args["target_task"]+".json"), "r", encoding="utf-8") as f:
         config = json.load(f)
-    if args["finetune"]:
+    if args["full_model"]:
         output_base = os.path.join(OUTPUT_DIR_FINETUNE, args["target_task"])
     else:
         output_base = os.path.join(OUTPUT_DIR_ADAPTER, args["target_task"])
     if not os.path.exists(output_base):
         os.makedirs(output_base)
     # patch model/ training args
-    if args["finetune"]:
-        _patch_run_config_finetune(config)
+    if args["full_model"]:
+        _patch_run_config_full_model(config)
     else:
         _patch_run_config_adapter(config)
     for dataset_size in args["train_sizes"]:
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     parser.add_argument("--overwrite_output", action="store_true", default=False)
     parser.add_argument("--train_sizes", type=lambda s: [int(item) for item in s.split(",")])
     parser.add_argument("--restarts", type=int, default=None)
-    parser.add_argument("--finetune", action="store_true")
+    parser.add_argument("--full_model", action="store_true")
     args = vars(parser.parse_args())
 
     run_limited_training(args)

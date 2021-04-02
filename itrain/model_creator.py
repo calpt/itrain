@@ -4,6 +4,7 @@ from transformers import (
     AdapterConfig,
     AdapterType,
     AutoConfig,
+    AutoModel,
     AutoModelForMultipleChoice,
     AutoModelForQuestionAnswering,
     AutoModelForSequenceClassification,
@@ -52,7 +53,12 @@ def create_model(args: ModelArguments, manager: DatasetManager, use_classic_mode
 
     if use_classic_model_class:
         head_type = head_config["head_type"]
-        model = HEAD_TO_CLASSIC_MODEL_MAP[head_type].from_pretrained(args.model_name_or_path, config=config)
+        if args.drop_model_head:
+            base_model = AutoModel.from_pretrained(args.model_name_or_path, config=config)
+            model = HEAD_TO_CLASSIC_MODEL_MAP[head_type].from_config(config)
+            model.base_model = base_model
+        else:
+            model = HEAD_TO_CLASSIC_MODEL_MAP[head_type].from_pretrained(args.model_name_or_path, config=config)
     else:
         model = AutoModelWithHeads.from_pretrained(args.model_name_or_path, config=config)
     register_heads(model)
