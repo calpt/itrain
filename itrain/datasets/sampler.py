@@ -107,10 +107,12 @@ class QAPossibleSubsetRandomSampler(Sampler):
     replacement: bool
 
     def __init__(self, features: Sequence, num_samples: int, replacement: bool = False, generator=None) -> None:
-        if not isinstance(num_samples, int) or num_samples <= 0:
+        if not isinstance(num_samples, int):
             raise ValueError(
-                "num_samples should be a positive integer " "value, but got num_samples={}".format(num_samples)
+                "num_samples should be an integer " "value, but got num_samples={}".format(num_samples)
             )
+        if num_samples <= 0:
+            num_samples = len(features)
 
         # count possible instances
         possible = 0

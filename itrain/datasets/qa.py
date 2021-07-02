@@ -250,7 +250,7 @@ class QADatasetManager(DatasetManager):
     def train_sampler(self):
         if (
             self.with_negative
-            or self.args.train_subset_size <= 0
+            or self.args.train_subset_size < 0
             or self.args.train_subset_size >= len(self.train_split)
         ):
             return super().train_sampler()

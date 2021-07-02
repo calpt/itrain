@@ -2,8 +2,8 @@ import argparse
 import json
 import os
 
+from config_utils import get_dataset_config, restore_path
 from itrain import ModelArguments, RunArguments, Setup
-from utils import get_dataset_config, restore_path
 
 
 FUSION_OUTPUT_DIR = "fusion_output"

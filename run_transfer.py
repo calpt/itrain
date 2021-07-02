@@ -2,12 +2,11 @@ import argparse
 import json
 import os
 
+from config_utils import get_dataset_config, restore_path
 from itrain import ModelArguments, RunArguments, Setup
-from utils import get_dataset_config, restore_path
 
 
-TRANSFER_OUTPUT_DIR = "transfer_output"
-TRANSFER_OUTPUT_DIR_FULL_MODEL = "full_transfer_output"
+TRANSFER_OUTPUT_DIR = os.path.expanduser(os.getenv("RUN_TRANSFER_OUTPUT_DIR", "transfer_output"))
 FUSION_OUTPUT_DIR = "fusion_output"
 
 
@@ -18,10 +17,7 @@ def run_seq_finetuning(args):
         target_task_name = args["target_task"] + "_n" + str(args["train_size"])
     else:
         target_task_name = args["target_task"]
-    if args["full_model"]:
-        output_base = os.path.join(TRANSFER_OUTPUT_DIR_FULL_MODEL, "to_" + target_task_name)
-    else:
-        output_base = os.path.join(TRANSFER_OUTPUT_DIR, "to_" + target_task_name)
+    output_base = os.path.join(TRANSFER_OUTPUT_DIR, "to_" + target_task_name)
     # patch model/ training args
     if args["full_model"]:
         config["model"]["train_adapter"] = False
@@ -52,6 +48,15 @@ def run_seq_finetuning(args):
         if args["overwrite_mode"] == 0 and os.path.exists(output_dir):
             print(f"Skipping task {task_name} as it already exists.")
             continue
+        # also skip if appending & max runs reached
+        elif (
+            args["overwrite_mode"] == 1
+            and args["max_restarts"] is not None
+            and task_name in results
+            and len(results[task_name]["seeds"]) >= args["max_restarts"]
+        ):
+            print(f"Skipping task {task_name} as it already reached {args['max_restarts']} runs.")
+            continue
 
         pre_training_dataset_manager, _ = get_dataset_config(task_name)
         setup = Setup(id=args["id"])
@@ -65,6 +70,8 @@ def run_seq_finetuning(args):
         setup.notify(config["notify"])
         setup._config_name = "transfer_" + task_name + "_to_" + target_task_name
         # setup model
+        if args["model_name_or_path"]:
+            config["model"]["model_name_or_path"] = args["model_name_or_path"]
         if args["full_model"]:
             if not config["model"].get("tokenizer_name", None):
                 # HACK in case the tokenizer is not saved with the model
@@ -89,9 +96,9 @@ def run_seq_finetuning(args):
             results[task_name] = run_results
         del setup
 
-    # save results
-    with open(final_results_file, "w") as f:
-        json.dump(results, f)
+        # save results after every iteration
+        with open(final_results_file, "w") as f:
+            json.dump(results, f)
 
 
 # def run_fusion_seq(args):
@@ -148,7 +155,9 @@ if __name__ == "__main__":
     parser.add_argument("--num_train_epochs", type=int, default=None)
     parser.add_argument("--train_size", type=int, default=-1)
     parser.add_argument("--restarts", type=int, default=None)
+    parser.add_argument("--max_restarts", type=int, default=None)
     parser.add_argument("--full_model", action="store_true")
+    parser.add_argument("--model_name_or_path", default=None)
     args = vars(parser.parse_args())
 
     fusion = args.pop("fusion")

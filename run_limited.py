@@ -5,9 +5,8 @@ import os
 from itrain import DATASET_MANAGER_CLASSES, DatasetArguments, ModelArguments, RunArguments, Setup
 
 
-OUTPUT_DIR_ADAPTER="limited_output"
-OUTPUT_DIR_FINETUNE="finetune_limited_output"
-RUN_CONFIGS="run_configs"
+OUTPUT_DIR = os.path.expanduser(os.getenv("RUN_LIMITED_OUTPUT_DIR", "limited_output"))
+RUN_CONFIGS = "run_configs"
 
 
 def _patch_run_config_adapter(config):
@@ -25,12 +24,9 @@ def _patch_run_config_full_model(config):
 def run_limited_training(args):
     results = {}
     # load training config
-    with open(os.path.join(RUN_CONFIGS, args["target_task"]+".json"), "r", encoding="utf-8") as f:
+    with open(os.path.join(RUN_CONFIGS, args["target_task"] + ".json"), "r", encoding="utf-8") as f:
         config = json.load(f)
-    if args["full_model"]:
-        output_base = os.path.join(OUTPUT_DIR_FINETUNE, args["target_task"])
-    else:
-        output_base = os.path.join(OUTPUT_DIR_ADAPTER, args["target_task"])
+    output_base = os.path.join(OUTPUT_DIR, args["target_task"])
     if not os.path.exists(output_base):
         os.makedirs(output_base)
     # patch model/ training args
@@ -60,6 +56,8 @@ def run_limited_training(args):
             setup.evaluation()
         setup.notify(config["notify"])
         # setup model
+        if args["model_name_or_path"]:
+            config["model"]["model_name_or_path"] = args["model_name_or_path"]
         setup.model(ModelArguments(**config["model"]))
         # start!
         run_results = setup.run(restarts=args["restarts"])
@@ -84,6 +82,7 @@ if __name__ == "__main__":
     parser.add_argument("--train_sizes", type=lambda s: [int(item) for item in s.split(",")])
     parser.add_argument("--restarts", type=int, default=None)
     parser.add_argument("--full_model", action="store_true")
+    parser.add_argument("--model_name_or_path", default=None)
     args = vars(parser.parse_args())
 
     run_limited_training(args)

@@ -1,7 +1,8 @@
 {
     "dataset": {
         "dataset_name": "pmb_sem_tagging",
-        "dataset_dir": "~/itrain/itrain/ext/datasets/pmb_sem_tagging.py"
+        "dataset_dir": "~/itrain/itrain/ext/datasets/pmb_sem_tagging.py",
+        "max_seq_length": 512
     },
     "model": {
         "model_name_or_path": "roberta-base",

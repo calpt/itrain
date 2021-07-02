@@ -13,7 +13,7 @@ from .arguments import DatasetArguments, ModelArguments, RunArguments
 from .datasets import DATASET_MANAGER_CLASSES, CacheMode, DatasetManager
 from .model_creator import create_model, create_tokenizer, register_heads
 from .notifier import NOTIFIER_CLASSES
-from .runner import Runner, set_seed
+from .trainer import Trainer, set_seed
 
 
 OUTPUT_FOLDER = os.environ.get("ITRAIN_OUTPUT") or "run_output"
@@ -182,7 +182,7 @@ class Setup:
             # Configure and run training
             if self._train_run_args:
                 train_run_args = self._prepare_run_args(self._train_run_args, restart=i if has_restarts else None)
-                runner = Runner(
+                trainer = Trainer(
                     self.model_instance,
                     train_run_args,
                     self.dataset_manager,
@@ -196,14 +196,14 @@ class Setup:
                             message="Training setup:", seed=seed, **train_run_args.to_sanitized_dict()
                         )
                 try:
-                    step, epoch, loss, best_score, best_model_dir = runner.train(
+                    step, epoch, loss, best_score, best_model_dir = trainer.train(
                         self.model_args.model_name_or_path
                         if os.path.isdir(self.model_args.model_name_or_path)
                         else None
                     )
                     # only save the final model if we don't use early stopping
                     if train_run_args.patience <= 0:
-                        runner.save_model()
+                        trainer.save_model()
                 except Exception as ex:
                     for notifier in self._notifiers.values():
                         notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
@@ -245,7 +245,7 @@ class Setup:
                 eval_run_args = self._prepare_run_args(
                     self._eval_run_args or self._train_run_args, restart=i if has_restarts else None
                 )
-                runner = Runner(
+                trainer = Trainer(
                     self.model_instance,
                     eval_run_args,
                     self.dataset_manager,
@@ -255,7 +255,7 @@ class Setup:
                 )
                 try:
                     eval_dataset = self.dataset_manager.dataset[self._eval_split] if self._eval_split else None
-                    results = runner.evaluate(eval_dataset=eval_dataset, log=False)
+                    results = trainer.evaluate(eval_dataset=eval_dataset, log=False)
                 except Exception as ex:
                     for notifier in self._notifiers.values():
                         notifier.notify_error(f"{ex.__class__.__name__}: {ex}")

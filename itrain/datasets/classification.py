@@ -32,10 +32,15 @@ class ClassificationDatasetManager(DatasetManagerBase):
         load_metric: Union[bool, Metric] = False,
     ):
         super().__init__(args, tokenizer, load_metric=load_metric)
+        self._no_stratification = False
         self._configure()
 
     def train_sampler(self):
-        if self.args.train_subset_size <= 0 or self.args.train_subset_size >= len(self.train_split):
+        if (
+            self.args.train_subset_size <= 0
+            or self.args.train_subset_size >= len(self.train_split)
+            or self._no_stratification
+        ):
             return super().train_sampler()
         else:
             return StratifiedRandomSampler(
@@ -239,6 +244,7 @@ class SuperGlueManager(ClassificationDatasetManager):
         elif self.args.task_name == "record":
             self.column_config = ColumnConfig(["passage", "query", "entities"], "answers")
             self._encode_batch = self._encode_batch_record
+            self._no_stratification = True
         elif self.args.task_name == "wic":
             self.column_config = ColumnConfig(["sentence1", "sentence2", "word"], "label")
             self._encode_batch = self._encode_batch_wic

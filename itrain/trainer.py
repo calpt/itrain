@@ -1,3 +1,7 @@
+"""
+Adapted from HuggingFace's Trainer class
+"""
+
 import json
 import logging
 import os
@@ -15,7 +19,7 @@ from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm, trange
 from transformers import AdamW, PreTrainedModel, get_linear_schedule_with_warmup
-from transformers.trainer_pt_utils import nested_concat, nested_numpify
+from transformers.trainer_pt_utils import nested_numpify
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput
 
 from .arguments import RunArguments
@@ -27,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 def set_seed(seed: int):
     if seed is None:
-        seed = int((time.time()*1000) % 2**32)
+        seed = int((time.time() * 1000) % 2**32)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -61,7 +65,7 @@ class TrainingOutput(NamedTuple):
     best_model_dir: str
 
 
-class Runner:
+class Trainer:
     model: PreTrainedModel
     args: RunArguments
     dataset_manager: DatasetManager
@@ -280,7 +284,6 @@ class Runner:
 
                         torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                         torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-
 
                 if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
                     epoch_iterator.close()
