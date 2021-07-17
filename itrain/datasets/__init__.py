@@ -1,14 +1,9 @@
 # flake8: noqa
 
-from .classification import (
-    ANLIManager,
-    ClassificationDatasetManager,
-    GlueManager,
-    SciTailManager,
-    SuperGlueManager,
-    WikiQAManager,
-)
+from .classification import ANLIManager, ClassificationDatasetManager, SciTailManager, WikiQAManager
 from .dataset_manager import CacheMode, ColumnConfig, DatasetManager, DatasetManagerBase
+from .dependency_parsing import UniversalDependenciesManager
+from .glue import GlueManager
 from .multiple_choice import (
     ARTManager,
     CommonsenseQAManager,
@@ -37,6 +32,7 @@ from .qa import (
     SquadV2Manager,
     WikiHopManager,
 )
+from .super_glue import SuperGlueManager
 from .tagging import FCEErrorDetectionManager, TaggingDatasetManager
 
 
@@ -89,4 +85,5 @@ DATASET_MANAGER_CLASSES = {
     "pmb_sem_tagging": TaggingDatasetManager,
     "wnut_17": TaggingDatasetManager,
     "mit_movie": TaggingDatasetManager,
+    "ud_parsing": UniversalDependenciesManager,
 }

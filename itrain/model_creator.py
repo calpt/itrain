@@ -15,6 +15,7 @@ from transformers import (
 
 from .arguments import ModelArguments
 from .datasets import DatasetManager
+from .ext.modeling.dependency_parsing import BiaffineParsingHead
 
 
 HEAD_TO_CLASSIC_MODEL_MAP = {
@@ -34,9 +35,7 @@ def create_tokenizer(args: ModelArguments, **kwargs):
 
 
 def register_heads(model):
-    # TODO currently no custom heads
-    pass
-    # model.register_custom_head("dependency_parsing", BiaffineParsingHead)
+    model.register_custom_head("dependency_parsing", BiaffineParsingHead)
 
 
 # TODO check full fine-tuning with flex heads
