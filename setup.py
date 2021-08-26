@@ -1,4 +1,4 @@
-from setuptools import find_packages, setup
+from setuptools import setup
 
 
 setup(
@@ -8,15 +8,12 @@ setup(
     author_email="calpt@mail.de",
     description="Simple training setup",
     license="MIT",
-    # long_description
-    # long_description_content_type="text/markdown",
-    # url
-    packages=find_packages(),
+    py_modules=["itrain"],
     install_requires=[
         "adapter-transformers == 1.1.1",
         "datasets == 1.6.2",
+        "scikit-learn == 0.23.2",
         "seqeval == 1.2.2",
-        "sklearn",
         "tgsend >= 0.3",
         "torch == 1.7.1",
         "tqdm",

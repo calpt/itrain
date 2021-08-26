@@ -2,11 +2,12 @@ import argparse
 import json
 import os
 
+from config_utils import RUN_CONFIGS
+
 from itrain import DATASET_MANAGER_CLASSES, DatasetArguments, ModelArguments, RunArguments, Setup
 
 
 OUTPUT_DIR = os.path.expanduser(os.getenv("RUN_LIMITED_OUTPUT_DIR", "limited_output"))
-RUN_CONFIGS = "run_configs"
 
 
 def _patch_run_config_adapter(config):

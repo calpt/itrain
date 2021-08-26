@@ -11,6 +11,7 @@ from .dataset_manager import CacheMode, ColumnConfig, DatasetManagerBase
 
 class TaggingDatasetManager(DatasetManagerBase):
     """
+    Base dataset manager for all tagging tasks.
     This class is adapted from the run_ner.py example script of HuggingFace transformers.
     """
 

@@ -25,6 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 class Setup:
+    """
+    Defines, configures and runs a full Transformer training setup,
+    including dataset configuration, model setup, training and evaluation.
+    """
+
     id: int
     dataset_manager: DatasetManager
     model_instance: PreTrainedModel
@@ -47,6 +52,9 @@ class Setup:
         return self._config_name or self.dataset_manager.name
 
     def dataset(self, args_or_manager: Union[DatasetArguments, DatasetManager]):
+        """
+        Set up the dataset.
+        """
         if self.dataset_manager is not None:
             raise ValueError("Dataset already set.")
         if isinstance(args_or_manager, DatasetManager):
@@ -55,21 +63,31 @@ class Setup:
             self.dataset_manager = DATASET_MANAGER_CLASSES[args_or_manager.dataset_name](args_or_manager)
 
     def model(self, args: ModelArguments):
+        """
+        Set up the model.
+        """
         if self.model_instance is not None:
             raise ValueError("Model already set.")
-        if not self.dataset_manager:
-            raise ValueError("Set dataset before creating model.")
         self.model_args = args
 
     def training(self, args: RunArguments):
+        """
+        Set up training.
+        """
         self._train_run_args = args
 
     def evaluation(self, args: Optional[RunArguments] = None, split=None):
+        """
+        Set up evaluation.
+        """
         self._do_eval = True
         self._eval_run_args = args
         self._eval_split = split
 
     def notify(self, notifier_name: str, **kwargs):
+        """
+        Set up a notifier. Can be either "telegram" or "email" currently.
+        """
         self._notifiers[notifier_name] = NOTIFIER_CLASSES[notifier_name](**kwargs)
 
     def _override(self, instance, overrides):
@@ -82,6 +100,9 @@ class Setup:
         return type(instance)(**orig_dict)
 
     def load_from_file(self, file, overrides=None):
+        """
+        Load a setup from file.
+        """
         with open(file, "r", encoding="utf-8") as f:
             config = json.load(f)
         dataset_args = DatasetArguments(**config["dataset"])
@@ -134,6 +155,19 @@ class Setup:
         return prepared_args
 
     def run(self, restarts=None, first_run_index=0):
+        """
+        Run this setup. Dataset, model, and training or evaluation are expected to be set.
+
+        Args:
+            restarts (Union[list, int], optional): Defines the random training restarts. Can be either:
+                - a list of integers: run training with each of the given values as random seed.
+                - a single integer: number of random restarts, each with a random seed.
+                - None (default): one random restart.
+            first_run_index (int, optional): The start index in the sequence of random restarts. Defaults to 0.
+
+        Returns:
+            dict: A dictionary of run results containing the used random seeds and (optionally) evaluation results.
+        """
         # Set up tokenizer
         self._setup_tokenizer()
         # Load dataset

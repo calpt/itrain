@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 class MultipleChoiceDatasetManager(DatasetManagerBase):
+    """
+    Base dataset manager for multiple-choice tasks.
+    """
+
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer, load_metric=False)
 
@@ -32,9 +36,7 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
             valid_label = label in self.choice_label_map
         else:
             valid_label = True
-        return valid_label and all(
-            [example[col] is not None for col in self.column_config.inputs]
-        )
+        return valid_label and all([example[col] is not None for col in self.column_config.inputs])
 
     def _build_input_choice(self, question, ending):
         if "_" in question:

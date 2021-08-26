@@ -10,6 +10,10 @@ from .sampler import StratifiedRandomSampler
 
 
 class ClassificationDatasetManager(DatasetManagerBase):
+    """
+    Base dataset manager for sequence classification tasks.
+    """
+
     tasks_num_labels = {
         "imdb": 2,
         "rotten_tomatoes": 2,

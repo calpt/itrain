@@ -10,6 +10,10 @@ from .dataset_manager import ColumnConfig
 
 
 class SuperGlueManager(ClassificationDatasetManager):
+    """
+    Dataset manager for SuperGLUE benchmark.
+    """
+
     tasks_num_labels = {
         "boolq": 2,
         "cb": 3,
@@ -138,7 +142,7 @@ class SuperGlueManager(ClassificationDatasetManager):
         return encoded
 
     def _encode_batch_wsc(self, examples):
-        raise NotImplementedError()  # TODO WIC & WSC seem to need span classification ?
+        raise NotImplementedError()  # TODO
 
     def _encode_batch_classification(self, examples):
         encoded = self.tokenizer(

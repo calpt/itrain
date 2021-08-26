@@ -236,6 +236,10 @@ def squad_convert_examples_to_features(
 
 
 class QADatasetManager(DatasetManager):
+    """
+    Base dataset manager for SQuAD-like extractive QA tasks.
+    """
+
     label_column_names = ["start_positions", "end_positions"]
     with_negative = False
     train_file_name = None
@@ -406,7 +410,7 @@ class DuoRCSelfManager(QADatasetManager):
     dev_file_name = "DuoRC_Self_dev.json.gz"
 
 
-## Not in MultiQA ##
+# Not in MultiQA #
 
 
 class QuorefManager(QADatasetManager):

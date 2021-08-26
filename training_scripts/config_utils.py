@@ -4,12 +4,13 @@ import os
 from itrain import DATASET_MANAGER_CLASSES, DatasetArguments
 
 
-RUN_CONFIGS=os.path.expanduser("~/itrain/run_configs")
+RUN_CONFIGS = os.path.expanduser(os.getenv("RUN_CONFIG_DIR", "~/itrain/run_configs"))
+DEFAULT_TASK_MAP = os.path.expanduser(os.getenv("DEFAULT_TASK_MAP", "~/itrain/trained_adapter_map.json"))
 
 
 def get_dataset_config(config_name, train_size=-1):
     # init setup
-    with open(os.path.join(RUN_CONFIGS, config_name+".json"), "r", encoding="utf-8") as f:
+    with open(os.path.join(RUN_CONFIGS, config_name + ".json"), "r", encoding="utf-8") as f:
         config = json.load(f)
     # dataset manager
     config["dataset"]["train_subset_size"] = train_size

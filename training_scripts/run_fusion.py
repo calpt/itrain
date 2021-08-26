@@ -2,7 +2,8 @@ import argparse
 import json
 import os
 
-from config_utils import get_dataset_config, restore_path
+from config_utils import DEFAULT_TASK_MAP, get_dataset_config, restore_path
+
 from itrain import ModelArguments, RunArguments, Setup
 
 
@@ -61,9 +62,7 @@ def run_fusion(args, config_name=None):
     # iterate over all adapters for fusion
     for source_task in args["source_tasks"]:
         source_dataset_manager, _ = get_dataset_config(source_task)
-        load_adapters_map[source_task] = restore_path(
-            task_map, source_task, source_dataset_manager
-        )
+        load_adapters_map[source_task] = restore_path(task_map, source_task, source_dataset_manager)
     # patch model args
     config["model"]["load_adapters"] = load_adapters_map
     config["model"]["train_adapter_fusion"] = fusion_name
@@ -90,7 +89,7 @@ if __name__ == "__main__":
 
     parser.add_argument("target_task", type=str, help="Name of the target task training setup.")
     parser.add_argument("--id", type=int, default=0, help="ID of this run.")
-    parser.add_argument("--task_map", type=str, required=True)
+    parser.add_argument("--task_map", type=str, default=DEFAULT_TASK_MAP)
     parser.add_argument(
         "--overwrite_mode", type=int, choices=[0, 1, 2], default=0, help="0: no overwrite; 1: append; 2: overwrite"
     )

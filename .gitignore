@@ -11,3 +11,4 @@ run_logs
 samples
 /datasets
 *.csv
+/task_selection/output

@@ -1,6 +1,7 @@
 from itrain import DatasetArguments, ModelArguments, RunArguments, Setup
 
 
+# Create a new training setup
 setup = Setup()
 
 # Set up dataset
@@ -10,13 +11,10 @@ setup.dataset(DatasetArguments(
     max_seq_length=290,
 ))
 
-# Set up model
+# Set up a model for adapter training
 setup.model(ModelArguments(
     model_name_or_path="roberta-base",
     use_fast_tokenizer=True,
-    # load_adapters=[
-    # ],
-    # train_adapter_fusion="mnli,qnli",
     train_adapter=True,
     adapter_config="pfeiffer",
 ))
@@ -30,11 +28,12 @@ setup.training(RunArguments(
     patience_metric="eval_accuracy"
 ))
 
-# Evaluate
+# Run evaluation after training
 setup.evaluation()
 
-# Training notification
-# setup.notify("telegram")
+# Set up training notifications
+setup.notify("telegram")
 
+# Run the setup
 results = setup.run(restarts=1)
 print(results)

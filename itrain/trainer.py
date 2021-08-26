@@ -1,5 +1,20 @@
+# coding=utf-8
+# Copyright 2020-present the HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
-Adapted from HuggingFace's Trainer class
+Adapted version of HuggingFace's Trainer class in v3.5.1 of transformers.
+Includes some modifications & fixes from newer versions and removes a lot of code not needed for this project.
 """
 
 import json
@@ -31,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 def set_seed(seed: int):
     if seed is None:
-        seed = int((time.time() * 1000) % 2**32)
+        seed = int((time.time() * 1000) % 2 ** 32)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -359,7 +374,9 @@ class Trainer:
             self.tb_writer.close()
 
         logger.info("Training completed.")
-        return TrainingOutput(self.global_step, self.epoch, tr_loss / self.global_step, best_eval_score, best_model_dir)
+        return TrainingOutput(
+            self.global_step, self.epoch, tr_loss / self.global_step, best_eval_score, best_model_dir
+        )
 
     def _log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         if self.epoch is not None:

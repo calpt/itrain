@@ -34,6 +34,11 @@ class ColumnConfig:
 
 
 class DatasetManager(ABC):
+    """
+    Abstract base class of all dataset manager implementations.
+    All dataset implementations should at least inherit from this class.
+    """
+
     label_column_names = ["labels"]
 
     def __init__(
@@ -56,6 +61,7 @@ class DatasetManager(ABC):
 
     @property
     def name(self):
+        """The full name of the dataset."""
         if self.args.task_name:
             name = f"{self.args.dataset_name}_{self.args.task_name}"
         else:
@@ -72,13 +78,24 @@ class DatasetManager(ABC):
 
     @abstractmethod
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
+        """
+        Loads all dataset data into the manager instance. Optionally downloads the dataset and caches it.
+        preprocess() should be called after this method to convert the loaded data into the desired format for training.
+        """
         pass
 
     @abstractmethod
     def preprocess(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
+        """
+        Preprocesses the loaded dataset into the desired format for training.
+        The dataset has to be loaded using load() before this method is called.
+        """
         pass
 
     def load_and_preprocess(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
+        """
+        Loads and preprocesses the dataset. Equivalent to calling load() and then preprocess().
+        """
         self.load(cache_mode)
         self.preprocess(cache_mode)
 
@@ -143,7 +160,7 @@ class DatasetManagerBase(DatasetManager):
             download_mode=download_mode,
         )
         # split a validation set from the training set if not present
-        if not self.dev_split_name in self.dataset:
+        if self.dev_split_name not in self.dataset:
             logger.warning("Dataset does not have a pre-defined validation split. Creating one from the training set.")
             train_dev_split = self.dataset[self.train_split_name].train_test_split(test_size=0.2)
             self.dataset[str(self.train_split_name)] = train_dev_split["train"]

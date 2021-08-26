@@ -7,6 +7,10 @@ from .dataset_manager import ColumnConfig
 
 
 class GlueManager(ClassificationDatasetManager):
+    """
+    Dataset manager for GLUE benchmark.
+    """
+
     tasks_num_labels = {
         "cola": 2,
         "mnli": 3,
