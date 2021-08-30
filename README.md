@@ -1,7 +1,7 @@
 # efficient-task-transfer
 
-This repository provides scripts for easy training of **[Transformers](https://github.com/huggingface/transformers)** and **[Adapters](https://github.com/Adapter-Hub/adapter-transformers)** across [a wide range of NLU tasks](run_configs).
-It also contains code for the experiments in our paper ["What to Pre-Train on? Efficient Intermediate Task Selection"](https://arxiv.org/pdf/2104.08247).
+This repository contains code for the experiments in our paper ["What to Pre-Train on? Efficient Intermediate Task Selection"](https://arxiv.org/pdf/2104.08247).
+Most importantly, this includes scripts for easy training of **[Transformers](https://github.com/huggingface/transformers)** and **[Adapters](https://github.com/Adapter-Hub/adapter-transformers)** across [a wide range of NLU tasks](run_configs).
 
 ## Overview
 
@@ -90,12 +90,15 @@ export DEFAULT_TASK_MAP="/path/to/task_map.json"
 If you find this repository helpful, please cite our paper ["What to Pre-Train on? Efficient Intermediate Task Selection"](https://arxiv.org/pdf/2104.08247):
 
 ```bibtex
-@misc{poth2021pretrain,
-      title={What to Pre-Train on? Efficient Intermediate Task Selection}, 
-      author={Clifton Poth and Jonas Pfeiffer and Andreas Rücklé and Iryna Gurevych},
-      year={2021},
-      eprint={2104.08247},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+@inproceedings{poth-etal-2021-what-to-pre-train-on,
+    title={What to Pre-Train on? Efficient Intermediate Task Selection},
+    author={Clifton Poth and Jonas Pfeiffer and Andreas Rücklé and Iryna Gurevych},
+    booktitle = "Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+    month = nov,
+    year = "2021",
+    address = "Online",
+    publisher = "Association for Computational Linguistics",
+    url = "https://arxiv.org/abs/2104.08247",
+    pages = "to appear",
 }
 ```
