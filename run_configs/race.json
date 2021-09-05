@@ -17,6 +17,5 @@
         "patience": 5,
         "patience_metric": "eval_accuracy"
     },
-    "evaluation": true,
-    "notify": "telegram"
+    "evaluation": true
 }

@@ -13,7 +13,7 @@ The repository is structured as follows:
 
 ## Setup & Requirements
 
-The code in this repository was developed using Python v3.6.8, PyTorch v1.7.1 and [adapter-transformers v1.1.1](https://github.com/Adapter-Hub/adapter-transformers), which is based on [HugginFace Transformers v3.5.1](https://github.com/huggingface/transformers).
+The code in this repository was developed using Python v3.6.8, PyTorch v1.7.1 and [adapter-transformers v1.1.1](https://github.com/Adapter-Hub/adapter-transformers), which is based on [HuggingFace Transformers v3.5.1](https://github.com/huggingface/transformers).
 Using version different from the ones specified might not work.
 
 After setting up Python and PyTorch (ideally in a virtual environment), all additional requirements together with the `itrain` package can be installed using:
@@ -32,7 +32,8 @@ The `itrain` package provides a simple interface for configuring Transformer and
 - notifying on training start and results via mail or Telegram
 
 `itrain` can be invoked from the command line by passing a run configuration file in json format.
-Example configurations for all currently supported tasks can be found in the [run_configs](run_configs) folder. (Note: By default, all configurations have enabled training run notifications via Telegram, which requires setting up a message sending tool as described [here](https://github.com/alxnull/tgsend). If this is not wanted, remove `"notify": "telegram"` from the config.)
+Example configurations for all currently supported tasks can be found in the [run_configs](run_configs) folder.
+All supported configuration keys are defined in [arguments.py](itrain/arguments.py).
 
 Running a setup from the command line can look like this:
 ```bash

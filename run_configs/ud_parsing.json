@@ -19,5 +19,5 @@
         "patience_metric": "eval_uas"
     },
     "evaluation": "test",
-    "notify": "telegram"
+    
 }
