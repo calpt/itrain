@@ -18,6 +18,5 @@
         "patience": 2,
         "patience_metric": "eval_uas"
     },
-    "evaluation": "test",
-    
+    "evaluation": "test"
 }

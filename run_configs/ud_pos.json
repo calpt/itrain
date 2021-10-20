@@ -17,6 +17,5 @@
         "patience": 4,
         "patience_metric": "eval_accuracy"
     },
-    "evaluation": "test",
-    
+    "evaluation": "test"
 }
