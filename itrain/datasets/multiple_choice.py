@@ -1,6 +1,7 @@
 import logging
 
 import numpy as np
+import torch
 from transformers import PreTrainedTokenizerBase
 
 from ..arguments import DatasetArguments
@@ -23,9 +24,13 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
         if self.args.train_subset_size <= 0 or self.args.train_subset_size > len(self.train_split):
             return super().train_sampler()
         else:
+            g = torch.Generator()
+            if self.args.train_sampling_seed:
+                g.manual_seed(self.args.train_sampling_seed)
             return StratifiedRandomSampler(
                 self.train_split[self.column_config.label],
                 self.args.train_subset_size,
+                generator=g,
             )
 
     def _custom_filter(self, example):
@@ -62,7 +67,7 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
                 max_length=self.args.max_seq_length,
                 truncation=self._truncation,
                 padding=self._padding,
-                return_overflowing_tokens=True,
+                # return_overflowing_tokens=True,
             )
             # if "overflowing_tokens" in encoded and len(encoded["overflowing_tokens"][0]) > 0:
             #     logger.info("Cropping {0} tokens of input.".format(len(encoded["overflowing_tokens"][0])))

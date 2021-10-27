@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import List, Union
 
+import torch
 from datasets import GenerateMode, Metric, Split, load_dataset, load_metric
 from transformers import PreTrainedTokenizerBase, default_data_collator
 from transformers.file_utils import torch_cache_home
@@ -100,7 +101,10 @@ class DatasetManager(ABC):
         self.preprocess(cache_mode)
 
     def train_sampler(self):
-        return RandomSampler(self.train_split, num_samples=self.args.train_subset_size)
+        g = torch.Generator()
+        if self.args.train_sampling_seed:
+            g.manual_seed(self.args.train_sampling_seed)
+        return RandomSampler(self.train_split, num_samples=self.args.train_subset_size, generator=g)
 
     def collate_fn(self, features):
         return default_data_collator(features)

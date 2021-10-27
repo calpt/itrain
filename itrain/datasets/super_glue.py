@@ -110,7 +110,7 @@ class SuperGlueManager(ClassificationDatasetManager):
                     max_length=self.args.max_seq_length,
                     truncation=self._truncation,
                     padding=self._padding,
-                    return_overflowing_tokens=True,
+                    # return_overflowing_tokens=True,
                 )
                 # if "overflowing_tokens" in example_encoded and len(example_encoded["overflowing_tokens"]) > 0:
                 #     logger.info("Cropping {0} tokens of input.".format(len(example_encoded["overflowing_tokens"])))

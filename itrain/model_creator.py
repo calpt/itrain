@@ -2,7 +2,6 @@ from typing import Mapping
 
 from transformers import (
     AdapterConfig,
-    AdapterType,
     AutoConfig,
     AutoModel,
     AutoModelForMultipleChoice,
@@ -83,7 +82,7 @@ def create_model(args: ModelArguments, manager: DatasetManager, use_classic_mode
         # if adapter was already loaded, train the loaded adapter
         if manager.name not in model.config.adapters.adapters:
             adapter_config = AdapterConfig.load(args.adapter_config)
-            model.add_adapter(manager.name, AdapterType.text_task, config=adapter_config)
+            model.add_adapter(manager.name, config=adapter_config)
         model.train_adapter([manager.name])
     elif args.train_adapter_fusion is not None:
         fusion_adapters = args.train_adapter_fusion.split(",")

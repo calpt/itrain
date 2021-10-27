@@ -1,6 +1,7 @@
 from typing import Union
 
 import numpy as np
+import torch
 from datasets import Metric, concatenate_datasets
 from transformers import PreTrainedTokenizerBase
 
@@ -45,9 +46,13 @@ class ClassificationDatasetManager(DatasetManagerBase):
         ):
             return super().train_sampler()
         else:
+            g = torch.Generator()
+            if self.args.train_sampling_seed:
+                g.manual_seed(self.args.train_sampling_seed)
             return StratifiedRandomSampler(
                 self.train_split[self.column_config.label],
                 self.args.train_subset_size,
+                generator=g,
             )
 
     def _configure(self):

@@ -5,7 +5,7 @@ Credits: P. Rust et al.
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from transformers.adapter_heads import PredictionHead
+from transformers.adapters.heads import PredictionHead
 
 
 # Credit:

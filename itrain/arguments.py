@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import torch
+from transformers import TrainingArguments
 
 
 # from https://github.com/huggingface/transformers/blob/8e13b7359388882d93af5fe312efe56b6556fa23/src/transformers/hf_argparser.py#L29
@@ -53,6 +54,12 @@ class DatasetArguments:
             "If the limit is greater than the training set size or < 0, all examples will be used."
         },
     )
+    train_sampling_seed: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Seed for the random number generator for sampling training data."
+        },
+    )
 
     @property
     def base_name(self):
@@ -86,7 +93,7 @@ class ModelArguments:
         default=False,
         metadata={"help": "Train an adapter instead of the full model."},
     )
-    adapter_config: Optional[str] = field(
+    adapter_config: str = field(
         default="pfeiffer",
         metadata={"help": "Adapter configuration. Either an identifier or a path to a file."},
     )
@@ -154,7 +161,7 @@ class RunArguments:
     checkpoint_steps: int = field(default=0, metadata={"help": "Save model checkpoint after every X steps."})
     checkpoint_epochs: int = field(default=0, metadata={"help": "Save model checkpoint after every X epochs."})
     save_total_limit: Optional[int] = field(
-        default=None,
+        default=1,
         metadata={
             "help": (
                 "Limit the total amount of checkpoints."
@@ -185,3 +192,36 @@ class RunArguments:
         d = dataclasses.asdict(self)
         valid_types = [bool, int, float, str, torch.Tensor]
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}
+
+    def to_hf_training_args(self) -> TrainingArguments:
+        evaluation_strategy = "epoch" if self.evaluate_during_training else "no"
+        if evaluation_strategy != "no":
+            save_strategy = evaluation_strategy
+        elif self.checkpoint_epochs > 0:
+            save_strategy = "epoch"
+        elif self.checkpoint_steps > 0:
+            save_strategy = "steps"
+        else:
+            save_strategy = "no"
+        return TrainingArguments(
+            output_dir=self.output_dir,
+            evaluation_strategy=evaluation_strategy,
+            per_device_train_batch_size=self.batch_size,
+            per_device_eval_batch_size=self.batch_size,
+            gradient_accumulation_steps=self.gradient_accumulation_steps,
+            learning_rate=self.learning_rate,
+            weight_decay=self.weight_decay,
+            adam_epsilon=self.adam_epsilon,
+            max_grad_norm=self.max_grad_norm,
+            num_train_epochs=self.num_train_epochs,
+            max_steps=self.max_steps,
+            warmup_steps=self.warmup_steps,
+            logging_dir=self.logging_dir,
+            save_strategy=save_strategy,
+            save_steps=self.checkpoint_steps,
+            save_total_limit=self.save_total_limit,
+            past_index=self.past_index,
+            # For early stopping
+            load_best_model_at_end=self.patience > 0,
+            metric_for_best_model=self.patience_metric,
+        )

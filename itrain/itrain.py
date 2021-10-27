@@ -13,7 +13,7 @@ from .arguments import DatasetArguments, ModelArguments, RunArguments
 from .datasets import DATASET_MANAGER_CLASSES, CacheMode, DatasetManager
 from .model_creator import create_model, create_tokenizer, register_heads
 from .notifier import NOTIFIER_CLASSES
-from .trainer import Trainer, set_seed
+from .trainer import AdapterTrainer, FineTuningTrainer, set_seed
 
 
 OUTPUT_FOLDER = os.environ.get("ITRAIN_OUTPUT") or "run_output"
@@ -94,7 +94,7 @@ class Setup:
         orig_dict = dataclasses.asdict(instance)
         for k in orig_dict.keys():
             if k in overrides:
-                v = overrides.pop(k)
+                v = overrides[k]
                 if v is not None:
                     orig_dict[k] = v
         return type(instance)(**orig_dict)
@@ -138,7 +138,28 @@ class Setup:
             **self.dataset_manager.get_tokenizer_config_kwargs(),
         )
 
-    def _prepare_run_args(self, args: RunArguments, restart=None):
+    def _init_notifiers(self, no_runs=1):
+        # notifier_name should not start with a numeric char
+        if isinstance(self.id, int) or self.id[0].isnumeric():
+            notifier_name = ["#id" + str(self.id)]
+        else:
+            notifier_name = [self.id]
+        notifier_name.append(self.model_args.model_name_or_path)
+        if self.model_args.train_adapter:
+            notifier_name.append(self.model_args.adapter_config)
+        if self.name:
+            notifier_name.append(self.name)
+        for notifier in self._notifiers.values():
+            if not notifier.title:
+                notifier.title = ", ".join(notifier_name)
+
+        if no_runs > 1:
+            for notifier in self._notifiers.values():
+                notifier.notify_start(
+                    message=f"Training setup ({no_runs} runs):", **self._train_run_args.to_sanitized_dict()
+                )
+
+    def _prepare_run_args(self, args: RunArguments, restart=None, overrides=None):
         if not args.output_dir:
             args.output_dir = os.path.join(
                 OUTPUT_FOLDER, self.model_instance.config.model_type, self.name, str(self.id)
@@ -152,6 +173,8 @@ class Setup:
         if restart is not None:
             prepared_args.output_dir = os.path.join(args.output_dir, str(restart))
             prepared_args.logging_dir = os.path.join(args.logging_dir, str(restart))
+        if overrides is not None:
+            prepared_args = self._override(prepared_args, overrides)
         return prepared_args
 
     def run(self, restarts=None, first_run_index=0):
@@ -181,24 +204,8 @@ class Setup:
         # collect results
         all_results = defaultdict(list)
 
-        # Init notifier
-        # notifier_name should not start with a numeric char
-        if isinstance(self.id, int) or self.id[0].isnumeric():
-            notifier_name = ["#id" + str(self.id)]
-        else:
-            notifier_name = [self.id]
-        notifier_name.append(self.model_args.model_name_or_path)
-        if self.name:
-            notifier_name.append(self.name)
-        for notifier in self._notifiers.values():
-            if not notifier.title:
-                notifier.title = ", ".join(notifier_name)
-
-        if has_restarts:
-            for notifier in self._notifiers.values():
-                notifier.notify_start(
-                    message=f"Training setup ({len(restarts)} runs):", **self._train_run_args.to_sanitized_dict()
-                )
+        # Init notifiers
+        self._init_notifiers(no_runs=len(restarts))
 
         for i, seed in enumerate(restarts, start=first_run_index):
             # Set seed
@@ -216,13 +223,14 @@ class Setup:
             # Configure and run training
             if self._train_run_args:
                 train_run_args = self._prepare_run_args(self._train_run_args, restart=i if has_restarts else None)
-                trainer = Trainer(
+                if not is_full_finetuning:
+                    trainer_class = AdapterTrainer
+                else:
+                    trainer_class = FineTuningTrainer
+                trainer = trainer_class(
                     self.model_instance,
                     train_run_args,
                     self.dataset_manager,
-                    do_save_full_model=is_full_finetuning,
-                    do_save_adapters=self.model_args.train_adapter,
-                    do_save_adapter_fusion=self.model_args.train_adapter_fusion is not None,
                 )
                 if not has_restarts:
                     for notifier in self._notifiers.values():
@@ -230,11 +238,14 @@ class Setup:
                             message="Training setup:", seed=seed, **train_run_args.to_sanitized_dict()
                         )
                 try:
-                    step, epoch, loss, best_score, best_model_dir = trainer.train(
+                    step, loss, _ = trainer.train(
                         self.model_args.model_name_or_path
                         if os.path.isdir(self.model_args.model_name_or_path)
                         else None
                     )
+                    epoch = trainer.state.epoch
+                    best_score = trainer.state.best_metric
+                    best_model_dir = trainer.state.best_model_checkpoint
                     # only save the final model if we don't use early stopping
                     if train_run_args.patience <= 0:
                         trainer.save_model()
@@ -279,17 +290,18 @@ class Setup:
                 eval_run_args = self._prepare_run_args(
                     self._eval_run_args or self._train_run_args, restart=i if has_restarts else None
                 )
-                trainer = Trainer(
+                if not is_full_finetuning:
+                    trainer_class = AdapterTrainer
+                else:
+                    trainer_class = FineTuningTrainer
+                trainer = trainer_class(
                     self.model_instance,
                     eval_run_args,
                     self.dataset_manager,
-                    do_save_full_model=is_full_finetuning,
-                    do_save_adapters=self.model_args.train_adapter,
-                    do_save_adapter_fusion=self.model_args.train_adapter_fusion is not None,
                 )
                 try:
                     eval_dataset = self.dataset_manager.dataset[self._eval_split] if self._eval_split else None
-                    results = trainer.evaluate(eval_dataset=eval_dataset, log=False)
+                    results = trainer.evaluate(eval_dataset=eval_dataset)
                 except Exception as ex:
                     for notifier in self._notifiers.values():
                         notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
@@ -298,6 +310,7 @@ class Setup:
                     results["training_epochs"] = epoch
                 if self._eval_split:
                     results["eval_split"] = self._eval_split
+                results["best_model_dir"] = best_model_dir or train_run_args.output_dir
                 output_eval_file = os.path.join(eval_run_args.output_dir, "eval_results.txt")
                 with open(output_eval_file, "w") as f:
                     logger.info("***** Eval results {} (restart {}) *****".format(self.name, i))

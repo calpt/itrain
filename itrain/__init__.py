@@ -14,4 +14,4 @@ from .datasets import (
 )
 from .itrain import Setup
 from .notifier import NOTIFIER_CLASSES, EmailNotifier, Notifier, TelegramNotifier
-from .trainer import Trainer, set_seed
+from .trainer import AdapterTrainer, FineTuningTrainer, set_seed
