@@ -55,14 +55,6 @@ class TaggingDatasetManager(DatasetManagerBase):
         else:
             raise ValueError("No ColumnConfig specified.")
 
-    def _get_label_list(self, labels):
-        unique_labels = set()
-        for label in labels:
-            unique_labels = unique_labels | set(label)
-        label_list = list(unique_labels)
-        label_list.sort()
-        return label_list
-
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         super().load(cache_mode=cache_mode)
         if isinstance(self.train_split.features[self.column_config.label].feature, ClassLabel):

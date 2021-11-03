@@ -2,10 +2,11 @@ import logging
 
 import numpy as np
 import torch
+from datasets import ClassLabel
 from transformers import PreTrainedTokenizerBase
 
 from ..arguments import DatasetArguments
-from .dataset_manager import ColumnConfig, DatasetManagerBase
+from .dataset_manager import CacheMode, ColumnConfig, DatasetManagerBase
 from .sampler import StratifiedRandomSampler
 
 
@@ -32,6 +33,19 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
                 self.args.train_subset_size,
                 generator=g,
             )
+
+    def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
+        super().load(cache_mode=cache_mode)
+        if isinstance(self.train_split.features[self.column_config.label], ClassLabel):
+            self.label_list = self.train_split.features[self.column_config.label].names
+        else:
+            labels = self.train_split[self.column_config.label] + self.dev_split[self.column_config.label]
+            if self.test_split:
+                labels += self.test_split[self.column_config.label]
+            if not isinstance(labels[0], float):
+                self.label_list = self._get_label_list(labels)
+            else:
+                self.label_list = None
 
     def _custom_filter(self, example):
         if self.column_config.label:
@@ -102,6 +116,7 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
             "num_choices": len(self.choice_label_map),
             "layers": 2,
             "activation_function": "tanh",
+            "label2id": {v: k for k, v in enumerate(self.label_list)} if self.label_list else None,
         }
 
 

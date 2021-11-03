@@ -203,6 +203,7 @@ class Setup:
         has_restarts = len(restarts) > 1
         # collect results
         all_results = defaultdict(list)
+        best_model_dir = None
 
         # Init notifiers
         self._init_notifiers(no_runs=len(restarts))
@@ -310,7 +311,8 @@ class Setup:
                     results["training_epochs"] = epoch
                 if self._eval_split:
                     results["eval_split"] = self._eval_split
-                results["best_model_dir"] = best_model_dir or train_run_args.output_dir
+                if best_model_dir:
+                    results["best_model_dir"] = best_model_dir
                 output_eval_file = os.path.join(eval_run_args.output_dir, "eval_results.txt")
                 with open(output_eval_file, "w") as f:
                     logger.info("***** Eval results {} (restart {}) *****".format(self.name, i))

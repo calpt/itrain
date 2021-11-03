@@ -98,7 +98,7 @@ def create_model(args: ModelArguments, manager: DatasetManager, use_classic_mode
         # HACK: this only works for BERT-based models
         model.base_model.encoder.enable_adapters(args.train_adapter_fusion, True, True)
 
-    if not use_classic_model_class:
+    if not use_classic_model_class and manager.name not in model.heads:
         model.add_prediction_head_from_config(
             manager.name,
             head_config,

@@ -151,6 +151,14 @@ class DatasetManagerBase(DatasetManager):
         self._encode_remove_columns = False
         self.load_metric = load_metric
 
+    def _get_label_list(self, labels):
+        unique_labels = set()
+        for label in labels:
+            unique_labels = unique_labels | set(label if isinstance(label, list) else [label])
+        label_list = list(unique_labels)
+        label_list.sort()
+        return label_list
+
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # load dataset
         download_mode = (

@@ -12,10 +12,10 @@ setup(
     install_requires=[
         "adapter-transformers == 2.2.0",
         "datasets == 1.6.2",
-        "scikit-learn == 1.0",
+        "scikit-learn",
         "seqeval == 1.2.2",
         "tgsend >= 0.3",
-        "torch == 1.9.1",
+        "torch ~= 1.9.0",
         "tqdm",
         "yagmail",
         "keyring",
