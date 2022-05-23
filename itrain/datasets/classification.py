@@ -26,6 +26,7 @@ class ClassificationDatasetManager(DatasetManagerBase):
         "trec": 6,
         "eraser_multi_rc": 2,
         "sick": 3,
+        "ag_news": 4,
     }
 
     def __init__(

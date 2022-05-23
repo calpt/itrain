@@ -47,6 +47,7 @@ DATASET_MANAGER_CLASSES = {
     "snli": ClassificationDatasetManager,
     "eraser_multi_rc": ClassificationDatasetManager,
     "sick": ClassificationDatasetManager,
+    "ag_news": ClassificationDatasetManager,
     "wiki_qa": WikiQAManager,
     "scitail": SciTailManager,
     "anli": ANLIManager,
