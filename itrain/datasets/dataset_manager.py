@@ -7,7 +7,7 @@ from enum import IntEnum
 from typing import List, Union
 
 import torch
-from datasets import GenerateMode, Metric, Split, load_dataset, load_metric
+from datasets import DatasetDict, DownloadMode, Metric, Split, load_dataset, load_metric
 from transformers import PreTrainedTokenizerBase, default_data_collator
 from transformers.file_utils import torch_cache_home
 
@@ -162,9 +162,9 @@ class DatasetManagerBase(DatasetManager):
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # load dataset
         download_mode = (
-            GenerateMode.FORCE_REDOWNLOAD
+            DownloadMode.FORCE_REDOWNLOAD
             if cache_mode == CacheMode.NEW_DATASET_NEW_FEATURES
-            else GenerateMode.REUSE_DATASET_IF_EXISTS
+            else DownloadMode.REUSE_DATASET_IF_EXISTS
         )
         self.dataset = load_dataset(
             self._dataset_loc,
@@ -182,6 +182,8 @@ class DatasetManagerBase(DatasetManager):
         if self.load_metric:
             if inspect.isclass(self.load_metric) and issubclass(self.load_metric, Metric):
                 self.metric = self.load_metric(self.args.task_name)
+            elif isinstance(self.load_metric, str):
+                self.metric = load_metric(self.load_metric)
             else:
                 self.metric = load_metric(self.args.dataset_name, self.args.task_name)
 
@@ -206,20 +208,26 @@ class DatasetManagerBase(DatasetManager):
     def encode_batch(self, examples):
         pass
 
+    def encode_batch_eval(self, examples):
+        return self.encode_batch(examples)
+
     def _encode(self, load_from_cache=True):
-        cache_files = {}
-        for split_name in self.dataset.keys():
-            cache_files[split_name] = self._get_features_cache_file(split_name)
-        # HACK: currently expects columns in all splits to be identical
-        remove_columns = self.dataset.column_names[self.train_split_name] if self._encode_remove_columns else None
-        self.dataset = self.dataset.map(
-            self.encode_batch,
-            batched=True,
-            cache_file_names=cache_files,
-            load_from_cache_file=load_from_cache,
-            remove_columns=remove_columns,
-        )
-        self.dataset.set_format(columns=["input_ids"] + self.label_column_names + self.tokenizer.model_input_names)
+        self.raw_dataset = self.dataset
+        self.dataset = DatasetDict()
+        for split_name in self.raw_dataset.keys():
+            cache_file_name = self._get_features_cache_file(split_name)
+            remove_columns = self.raw_dataset.column_names[split_name] if self._encode_remove_columns else None
+            self.dataset[split_name] = self.raw_dataset[split_name].map(
+                self.encode_batch if split_name == self.train_split_name else self.encode_batch_eval,
+                batched=True,
+                cache_file_name=cache_file_name,
+                load_from_cache_file=load_from_cache,
+                remove_columns=remove_columns,
+            )
+            format_columns = ["input_ids"]
+            if set(self.label_column_names) <= set(self.dataset[split_name].column_names):
+                format_columns += self.label_column_names
+            self.dataset[split_name].set_format(columns=format_columns + self.tokenizer.model_input_names)
 
     def collate_fn(self, features):
         return default_data_collator(features)

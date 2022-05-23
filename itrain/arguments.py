@@ -47,6 +47,17 @@ class DatasetArguments:
             "Currently only used for QA tasks."
         },
     )
+    n_best_size: int = field(
+        default=20,
+        metadata={"help": "The total number of n-best predictions to generate when looking for an answer."},
+    )
+    max_answer_length: int = field(
+        default=30,
+        metadata={
+            "help": "The maximum length of an answer that can be generated. This is needed because the start "
+            "and end predictions are not conditioned on one another."
+        },
+    )
     train_subset_size: int = field(
         default=-1,
         metadata={
@@ -86,7 +97,7 @@ class ModelArguments:
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
     use_fast_tokenizer: string_to_bool = field(
-        default=False,
+        default=True,
         metadata={"help": "Specifies whether to use Hugginface's Fast Tokenizers."},
     )
     train_adapter: string_to_bool = field(
@@ -134,7 +145,7 @@ class RunArguments:
         },
     )
     patience_metric: str = field(
-        default="eval_loss", metadata={"help": "Metric used for early stopping. Loss by default."}
+        default=None, metadata={"help": "Metric used for early stopping. Loss by default."}
     )
 
     batch_size: int = field(default=16, metadata={"help": "Batch size."})
