@@ -3,14 +3,16 @@ import json
 import logging
 import os
 from collections import defaultdict
-from typing import Optional, Sequence, Union
+from typing import List, Optional, Sequence, Union
 
 import numpy as np
 import transformers
+import wandb
+from ruamel.yaml import YAML
 from transformers import PreTrainedModel
 
 from .arguments import DatasetArguments, ModelArguments, RunArguments
-from .datasets import DATASET_MANAGER_CLASSES, CacheMode, DatasetManager, QADatasetManager
+from .datasets import DATASET_MANAGER_CLASSES, DatasetManager, QADatasetManager
 from .model_creator import create_model, create_tokenizer, register_heads
 from .notifier import NOTIFIER_CLASSES
 from .trainer import AdapterTrainer, FineTuningTrainer, QAAdapterTrainer, QAFineTuningTrainer, set_seed
@@ -18,6 +20,9 @@ from .trainer import AdapterTrainer, FineTuningTrainer, QAAdapterTrainer, QAFine
 
 OUTPUT_FOLDER = os.environ.get("ITRAIN_OUTPUT") or "run_output"
 LOGS_FOLDER = os.environ.get("ITRAIN_LOGS") or "run_logs"
+
+SETUP_OUTPUT_FILE = "itrain_setup.json"
+STATE_OUTPUT_FILE = "itrain_state.json"
 
 logging.basicConfig(level=logging.INFO)
 transformers.logging.set_verbosity_info()
@@ -31,12 +36,14 @@ class Setup:
     """
 
     id: int
+    name: str
     dataset_manager: DatasetManager
     model_instance: PreTrainedModel
     model_args: ModelArguments
 
-    def __init__(self, id=0):
+    def __init__(self, id=0, name=None):
         self.id = id
+        self.name = name
         self.dataset_manager = None
         self.model_instance = None
         self.model_args = None
@@ -44,12 +51,18 @@ class Setup:
         self._do_eval = False
         self._eval_run_args = None
         self._eval_split = None
+        self._loggers = {}
         self._notifiers = {}
-        self._config_name = None
+        self.restarts = None
 
     @property
-    def name(self):
-        return self._config_name or self.dataset_manager.name
+    def full_name(self) -> List[str]:
+        name = self.name or self.dataset_manager.name
+        return [self.model_instance.config.model_type, name, str(self.id)]
+
+    @property
+    def output_dir(self) -> str:
+        return self._eval_run_args.output_dir if self._eval_run_args else self._train_run_args.output_dir
 
     def dataset(self, args_or_manager: Union[DatasetArguments, DatasetManager]):
         """
@@ -84,11 +97,17 @@ class Setup:
         self._eval_run_args = args
         self._eval_split = split
 
+    def logging(self, logger_name: str, **kwargs):
+        """
+        Set up logging to Tensorboard or W&B.
+        """
+        self._loggers[logger_name] = kwargs
+
     def notify(self, notifier_name: str, **kwargs):
         """
         Set up a notifier. Can be either "telegram" or "email" currently.
         """
-        self._notifiers[notifier_name] = NOTIFIER_CLASSES[notifier_name](**kwargs)
+        self.notifiers.append(NOTIFIER_CLASSES[notifier_name](**kwargs))
 
     def _override(self, instance, overrides):
         orig_dict = dataclasses.asdict(instance)
@@ -99,38 +118,81 @@ class Setup:
                     orig_dict[k] = v
         return type(instance)(**orig_dict)
 
-    def load_from_file(self, file, overrides=None):
-        """
-        Load a setup from file.
-        """
-        with open(file, "r", encoding="utf-8") as f:
-            config = json.load(f)
+    @classmethod
+    def from_dict(cls, config, overrides=None):
+        setup = cls(id=config["id"], name=config["name"])
         dataset_args = DatasetArguments(**config["dataset"])
         if overrides:
-            dataset_args = self._override(dataset_args, overrides)
-        self.dataset(dataset_args)
+            dataset_args = setup._override(dataset_args, overrides)
+        setup.dataset(dataset_args)
         model_args = ModelArguments(**config["model"])
         if overrides:
-            model_args = self._override(model_args, overrides)
-        self.model(model_args)
+            model_args = setup._override(model_args, overrides)
+        setup.model(model_args)
         if "training" in config:
             train_args = RunArguments(**config["training"])
             if overrides:
-                train_args = self._override(train_args, overrides)
-            self.training(train_args)
+                train_args = setup._override(train_args, overrides)
+            setup.training(train_args)
         if "evaluation" in config:
             if isinstance(config["evaluation"], dict):
                 eval_args = RunArguments(**config["evaluation"])
                 if overrides:
-                    eval_args = self._override(eval_args, overrides)
-                self.evaluation(eval_args)
+                    eval_args = setup._override(eval_args, overrides)
+                setup.evaluation(eval_args)
             elif isinstance(config["evaluation"], str):
-                self.evaluation(split=config["evaluation"])
+                setup.evaluation(split=config["evaluation"])
             elif config["evaluation"]:
-                self.evaluation()
+                setup.evaluation()
+        if "logging" in config:
+            for logger_name, kwargs in config["logging"].items():
+                setup.logging(logger_name, **kwargs)
         if "notify" in config:
-            self.notify(config["notify"])
-        self._config_name = os.path.splitext(os.path.basename(file))[0]
+            for notifier_name, kwargs in config["notify"].items():
+                setup.notify(notifier_name, **kwargs)
+        setup.restarts = config["restarts"]
+
+        return setup
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "dataset": self.dataset_manager.args.to_dict(),
+            "model": self.model_args.to_dict(),
+            "training": self._train_run_args.to_dict() if self._train_run_args else None,
+            "evaluation": self._eval_run_args.to_dict() if self._eval_run_args else (self._eval_split or self._do_eval),
+            "logging": self._loggers,
+            "notify": {k: v.to_dict() for k, v in self._notifiers.items()},
+            "restarts": self.restarts,
+        }
+
+    @classmethod
+    def from_file(cls, file, overrides=None):
+        """
+        Load a setup from file.
+        """
+        with open(file, "r", encoding="utf-8") as f:
+            if file.endswith(".yaml") or file.endswith(".yml"):
+                yaml = YAML(typ="safe")
+                config = yaml.load(f)
+            else:
+                config = json.load(f)
+        if "name" not in config:
+            config["name"] = os.path.splitext(os.path.basename(file))[0]
+
+        return cls.from_dict(config, overrides)
+
+    def to_file(self, file):
+        """
+        Save the setup to file.
+        """
+        with open(file, "w", encoding="utf-8") as f:
+            if file.endswith(".yaml") or file.endswith(".yml"):
+                yaml = YAML()
+                yaml.dump(self.to_dict(), f)
+            else:
+                json.dump(self.to_dict(), f, indent=4)
 
     def _setup_tokenizer(self):
         self.dataset_manager.tokenizer = create_tokenizer(
@@ -138,7 +200,7 @@ class Setup:
             **self.dataset_manager.get_tokenizer_config_kwargs(),
         )
 
-    def _init_notifiers(self, no_runs=1):
+    def _init_notifiers(self, num_runs=1):
         # notifier_name should not start with a numeric char
         if isinstance(self.id, int) or self.id[0].isnumeric():
             notifier_name = ["#id" + str(self.id)]
@@ -147,32 +209,50 @@ class Setup:
         notifier_name.append(self.model_args.model_name_or_path)
         if self.model_args.train_adapter:
             notifier_name.append(self.model_args.adapter_config)
-        if self.name:
-            notifier_name.append(self.name)
+        notifier_name.append(self.name or self.dataset_manager.name)
         for notifier in self._notifiers.values():
             if not notifier.title:
                 notifier.title = ", ".join(notifier_name)
 
-        if no_runs > 1:
+        if num_runs > 1:
             for notifier in self._notifiers.values():
                 notifier.notify_start(
-                    message=f"Training setup ({no_runs} runs):", **self._train_run_args.to_sanitized_dict()
+                    message=f"Training setup ({num_runs} runs):", **self._train_run_args.to_sanitized_dict()
                 )
 
-    def _prepare_run_args(self, args: RunArguments, restart=None, overrides=None):
-        if not args.output_dir:
-            args.output_dir = os.path.join(
-                OUTPUT_FOLDER, self.model_instance.config.model_type, self.name, str(self.id)
-            )
-        if not args.logging_dir:
-            args.logging_dir = os.path.join(
-                LOGS_FOLDER, "_".join([str(self.id), self.model_instance.config.model_type, self.name])
-            )
+    def _init_loggers(self, trial=None, do_resume=False):
+        for name, kwargs in self._loggers.items():
+            if name == "tensorboard":
+                if "logging_dir" not in kwargs:
+                    kwargs["logging_dir"] = os.path.join(LOGS_FOLDER, "_".join(self.full_name))
+                    if trial is not None:
+                        kwargs["logging_dir"] = os.path.join(kwargs["logging_dir"], str(trial))
+            elif name == "wandb":
+                wandb_kwargs = kwargs.copy()
+                if "name" not in wandb_kwargs:
+                    wandb_kwargs["name"] = "-".join(self.full_name)
+                    if trial is not None:
+                        wandb_kwargs["group"] = wandb_kwargs["name"]
+                        wandb_kwargs["name"] = wandb_kwargs["name"] + f"-{trial}"
+                wandb_kwargs["resume"] = do_resume
+                wandb_kwargs["id"] = wandb_kwargs["name"]
+                wandb.init(**wandb_kwargs)
+            else:
+                raise ValueError(f"Unknown logger name: {name}.")
+
+    def _init_args(self):
+        if self._train_run_args is not None:
+            if not self._train_run_args.output_dir:
+                self._train_run_args.output_dir = os.path.join(OUTPUT_FOLDER, *self.full_name)
+        if self._eval_run_args is not None:
+            if not self._eval_run_args.output_dir:
+                self._eval_run_args.output_dir = os.path.join(OUTPUT_FOLDER, *self.full_name)
+
+    def _prepare_run_args(self, args: RunArguments, trial=None, overrides=None):
         # create a copy with the run-specific adjustments
         prepared_args = RunArguments(**dataclasses.asdict(args))
-        if restart is not None:
-            prepared_args.output_dir = os.path.join(args.output_dir, str(restart))
-            prepared_args.logging_dir = os.path.join(args.logging_dir, str(restart))
+        if trial is not None:
+            prepared_args.output_dir = os.path.join(args.output_dir, str(trial))
         if overrides is not None:
             prepared_args = self._override(prepared_args, overrides)
         return prepared_args
@@ -208,180 +288,210 @@ class Setup:
         # Load dataset
         self.dataset_manager.load_and_preprocess()
 
+        restarts = restarts or self.restarts
         if not restarts:
             restarts = [42]
         if not isinstance(restarts, Sequence):
             restarts = [None for _ in range(int(restarts))]
-        has_restarts = len(restarts) > 1
-        # collect results
-        all_results = defaultdict(list)
-        best_model_dir = None
-
+        # Init state
+        state = {
+            "restarts": restarts,
+            "all_results": defaultdict(list),
+            "current_trial": first_run_index,
+            "trial_running": False,
+        }
         # Init notifiers
-        self._init_notifiers(no_runs=len(restarts))
+        self._init_notifiers(num_runs=len(restarts))
 
         for i, seed in enumerate(restarts, start=first_run_index):
-            # Set seed
-            seed = set_seed(seed)
-            all_results["seeds"].append(seed)
-
-            # Set up model
-            is_full_finetuning = not self.model_args.train_adapter and self.model_args.train_adapter_fusion is None
-            self.model_instance = create_model(
-                self.model_args,
-                self.dataset_manager,
-                use_classic_model_class=is_full_finetuning,
-            )
-
-            # Configure and run training
-            if self._train_run_args:
-                train_run_args = self._prepare_run_args(self._train_run_args, restart=i if has_restarts else None)
-                trainer_class = self._get_trainer_class(is_full_finetuning)
-                trainer = trainer_class(
-                    self.model_instance,
-                    train_run_args,
-                    self.dataset_manager,
-                )
-                if not has_restarts:
-                    for notifier in self._notifiers.values():
-                        notifier.notify_start(
-                            message="Training setup:", seed=seed, **train_run_args.to_sanitized_dict()
-                        )
-                try:
-                    step, loss, _ = trainer.train(
-                        self.model_args.model_name_or_path
-                        if os.path.isdir(self.model_args.model_name_or_path)
-                        else None
-                    )
-                    epoch = trainer.state.epoch
-                    best_score = trainer.state.best_metric
-                    best_model_dir = trainer.state.best_model_checkpoint
-                    # only save the final model if we don't use early stopping
-                    if train_run_args.patience <= 0:
-                        trainer.save_model()
-                except Exception as ex:
-                    for notifier in self._notifiers.values():
-                        notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
-                    raise ex
-                # if no evaluation is done, we're at the end here
-                if not self._do_eval:
-                    for notifier in self._notifiers.values():
-                        notifier.notify_end(
-                            message="Training results:",
-                            step=step,
-                            training_epochs=epoch,
-                            loss=loss,
-                            best_score=best_score,
-                        )
-                # otherwise, reload the best model for evaluation
-                elif best_model_dir:
-                    logger.info("Reloading best model for evaluation.")
-                    if self.model_args.train_adapter:
-                        for adapter_name in self.model_instance.config.adapters.adapters:
-                            path = os.path.join(best_model_dir, adapter_name)
-                            self.model_instance.load_adapter(path)
-                    if self.model_args.train_adapter_fusion is not None:
-                        path = os.path.join(best_model_dir, self.model_args.train_adapter_fusion)
-                        # HACK: adapter-transformers refuses to overwrite existing adapter_fusion config
-                        del self.model_instance.config.adapter_fusion
-                        self.model_instance.load_adapter_fusion(path)
-                        # HACK: also reload the prediction head
-                        head_path = os.path.join(best_model_dir, self.dataset_manager.name)
-                        self.model_instance.load_head(head_path)
-                    if is_full_finetuning:
-                        self.model_instance = self.model_instance.from_pretrained(best_model_dir)
-                        register_heads(self.model_instance)
-                        self.model_instance.active_head = self.dataset_manager.name
-            else:
-                epoch = None
-
-            # Configure and run eval
-            if self._do_eval:
-                eval_run_args = self._prepare_run_args(
-                    self._eval_run_args or self._train_run_args, restart=i if has_restarts else None
-                )
-                trainer_class = self._get_trainer_class(is_full_finetuning)
-                trainer = trainer_class(
-                    self.model_instance,
-                    eval_run_args,
-                    self.dataset_manager,
-                )
-                try:
-                    eval_dataset = self.dataset_manager.dataset[self._eval_split] if self._eval_split else None
-                    results = trainer.evaluate(eval_dataset=eval_dataset)
-                except Exception as ex:
-                    for notifier in self._notifiers.values():
-                        notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
-                    raise ex
-                if epoch:
-                    results["training_epochs"] = epoch
-                if self._eval_split:
-                    results["eval_split"] = self._eval_split
-                if best_model_dir:
-                    results["best_model_dir"] = best_model_dir
-                output_eval_file = os.path.join(eval_run_args.output_dir, "eval_results.txt")
-                with open(output_eval_file, "w") as f:
-                    logger.info("***** Eval results {} (restart {}) *****".format(self.name, i))
-                    for key, value in results.items():
-                        logger.info("  %s = %s", key, value)
-                        f.write("%s = %s\n" % (key, value))
-                        # also append to aggregated results
-                        all_results[key].append(value)
-                if not has_restarts:
-                    for notifier in self._notifiers.values():
-                        notifier.notify_end(message="Evaluation results:", **results)
-            # Delete model
-            del self.model_instance
+            self._run_trial(state, i, seed)
 
         # post-process aggregated results
-        if has_restarts and self._do_eval:
-            stats = {"seeds": all_results["seeds"]}
-            for key, values in all_results.items():
-                if isinstance(values[0], float):
-                    stats[f"{key}_avg"] = np.mean(values)
-                    stats[f"{key}_std"] = np.std(values)
+        if len(restarts) > 1 and self._do_eval:
+            self._generate_stats(state)
 
-            output_dir = self._eval_run_args.output_dir if self._eval_run_args else self._train_run_args.output_dir
-            with open(os.path.join(output_dir, f"aggregated_results_{self.id}.json"), "w") as f:
-                json.dump(stats, f)
-            for notifier in self._notifiers.values():
-                notifier.notify_end(message=f"Aggregated results ({len(restarts)} runs):", **stats)
+        return dict(state["all_results"])
 
-        return dict(all_results)
+    def resume(self, file):
+        """
+        Resume running this setup from a given run state.
 
+        Args:
+            file (str): The run state file to load.
 
-def main():
-    import argparse
+        Returns:
+            dict: A dictionary of run results containing the used random seeds and (optionally) evaluation results.
+        """
+        # Set up tokenizer
+        self._setup_tokenizer()
+        # Load dataset
+        self.dataset_manager.load_and_preprocess()
 
-    parser = argparse.ArgumentParser(description="Simple tool to setup Transformers training runs.")
-    parser.add_argument("config", type=str, help="Path to the json file containing the full training setup.")
-    parser.add_argument("--id", type=int, default=0, help="ID of this run.")
-    parser.add_argument(
-        "--preprocess_only", action="store_true", default=False, help="Only run dataset preprocessing."
-    )
-    restarts_group = parser.add_mutually_exclusive_group()
-    restarts_group.add_argument("--seeds", type=lambda s: [int(item) for item in s.split(",")])
-    restarts_group.add_argument("--restarts", type=int, default=None)
-    # add arguments from dataclasses
-    for dtype in (DatasetArguments, ModelArguments, RunArguments):
-        for field in dataclasses.fields(dtype):
-            field_name = f"--{field.name}"
-            kwargs = field.metadata.copy()
-            kwargs["type"] = field.type
-            kwargs["default"] = None
-            parser.add_argument(field_name, **kwargs)
+        # Load run state
+        with open(file, "r") as f:
+            state = json.load(f)
+            restarts = state["restarts"]
 
-    args = vars(parser.parse_args())
+        # Init notifiers
+        self._init_notifiers(num_runs=len(restarts))
 
-    # Load and run
-    setup = Setup(id=args.pop("id"))
-    setup.load_from_file(args.pop("config"), overrides=args)
-    if args.pop("preprocess_only"):
-        setup._setup_tokenizer()
-        setup.dataset_manager.load_and_preprocess(CacheMode.USE_DATASET_NEW_FEATURES)
-    else:
-        setup.run(restarts=args.pop("seeds") or args.pop("restarts"))
+        start_index = state["current_trial"]
+        for i, seed in enumerate(restarts[start_index:], start=start_index):
+            do_resume = i == state["current_trial"] and state["trial_running"]
+            self._run_trial(state, i, seed, do_resume=do_resume)
 
+        # post-process aggregated results
+        if len(restarts) > 1 and self._do_eval:
+            self._generate_stats(state)
 
-if __name__ == "__main__":
-    main()
+        return dict(state["all_results"])
+
+    def _run_trial(self, state: dict, i: int, seed=None, do_resume=False):
+        # Init & set seed
+        has_restarts = len(state["restarts"]) > 1
+        best_model_dir = None
+        seed = set_seed(seed)
+
+        # Set up model
+        is_full_finetuning = not self.model_args.train_adapter and self.model_args.train_adapter_fusion is None
+        self.model_instance = create_model(
+            self.model_args,
+            self.dataset_manager,
+            use_classic_model_class=is_full_finetuning,
+        )
+
+        # Modify & save state
+        self._init_args()  # To make sure output dirs are set
+        state["all_results"]["seeds"].append(seed)
+        state["current_trial"] = i
+        state["trial_running"] = True
+        os.makedirs(self.output_dir, exist_ok=True)
+        self.to_file(os.path.join(self.output_dir, SETUP_OUTPUT_FILE))
+        with open(os.path.join(self.output_dir, STATE_OUTPUT_FILE), "w") as f:
+            json.dump(state, f)
+
+        # Init loggers
+        self._init_loggers(trial=i, do_resume=do_resume)
+
+        # Configure and run training
+        if self._train_run_args:
+            train_run_args = self._prepare_run_args(self._train_run_args, trial=i if has_restarts else None)
+            trainer_class = self._get_trainer_class(is_full_finetuning)
+            trainer = trainer_class(
+                self.model_instance,
+                train_run_args,
+                self.dataset_manager,
+            )
+            if not has_restarts:
+                for notifier in self._notifiers.values():
+                    notifier.notify_start(
+                        message="Training setup:", seed=seed, **train_run_args.to_sanitized_dict()
+                    )
+            try:
+                do_resume &= len(os.listdir(train_run_args.output_dir)) > 0
+                step, loss, _ = trainer.train(
+                    self.model_args.model_name_or_path
+                    if os.path.isdir(self.model_args.model_name_or_path)
+                    else do_resume,
+                )
+                epoch = trainer.state.epoch
+                best_score = trainer.state.best_metric
+                best_model_dir = trainer.state.best_model_checkpoint
+                # only save the final model if we don't use early stopping
+                if train_run_args.patience <= 0:
+                    trainer.save_model()
+            except Exception as ex:
+                for notifier in self._notifiers.values():
+                    notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
+                raise ex
+            # if no evaluation is done, we're at the end here
+            if not self._do_eval:
+                for notifier in self._notifiers.values():
+                    notifier.notify_end(
+                        message="Training results:",
+                        step=step,
+                        training_epochs=epoch,
+                        loss=loss,
+                        best_score=best_score,
+                    )
+            # otherwise, reload the best model for evaluation
+            elif best_model_dir:
+                logger.info("Reloading best model for evaluation.")
+                if self.model_args.train_adapter:
+                    for adapter_name in self.model_instance.config.adapters.adapters:
+                        path = os.path.join(best_model_dir, adapter_name)
+                        self.model_instance.load_adapter(path)
+                if self.model_args.train_adapter_fusion is not None:
+                    path = os.path.join(best_model_dir, self.model_args.train_adapter_fusion)
+                    self.model_instance.load_adapter_fusion(path)
+                    # HACK: also reload the prediction head
+                    head_path = os.path.join(best_model_dir, self.dataset_manager.name)
+                    self.model_instance.load_head(head_path)
+                if is_full_finetuning:
+                    self.model_instance = self.model_instance.from_pretrained(best_model_dir)
+                    register_heads(self.model_instance)
+                    self.model_instance.active_head = self.dataset_manager.name
+        else:
+            epoch = None
+
+        # Configure and run eval
+        if self._do_eval:
+            eval_run_args = self._prepare_run_args(
+                self._eval_run_args or self._train_run_args, trial=i if has_restarts else None
+            )
+            trainer_class = self._get_trainer_class(is_full_finetuning)
+            trainer = trainer_class(
+                self.model_instance,
+                eval_run_args,
+                self.dataset_manager,
+            )
+            try:
+                eval_dataset = self.dataset_manager.dataset[self._eval_split] if self._eval_split else None
+                results = trainer.evaluate(eval_dataset=eval_dataset)
+            except Exception as ex:
+                for notifier in self._notifiers.values():
+                    notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
+                raise ex
+            if epoch:
+                results["training_epochs"] = epoch
+            if self._eval_split:
+                results["eval_split"] = self._eval_split
+            if best_model_dir:
+                results["best_model_dir"] = best_model_dir
+            output_eval_file = os.path.join(eval_run_args.output_dir, "eval_results.txt")
+            with open(output_eval_file, "w") as f:
+                logger.info(
+                    "***** Eval results {} (trial {}) *****".format(self.name or self.dataset_manager.name, i)
+                )
+                for key, value in results.items():
+                    logger.info("  %s = %s", key, value)
+                    f.write("%s = %s\n" % (key, value))
+                    # also append to aggregated results
+                    state["all_results"][key].append(value)
+            if not has_restarts:
+                for notifier in self._notifiers.values():
+                    notifier.notify_end(message="Evaluation results:", **results)
+
+        # Save state
+        state["current_trial"] = state["current_trial"] + 1
+        state["trial_running"] = False
+        with open(os.path.join(self.output_dir, STATE_OUTPUT_FILE), "w") as f:
+            json.dump(state, f)
+
+        # Delete model
+        del self.model_instance
+        # Finish wandb
+        if "wandb" in self._loggers:
+            wandb.finish()
+
+    def _generate_stats(self, state: dict):
+        stats = {}
+        for key, values in state["all_results"].items():
+            if isinstance(values[0], float):
+                stats[f"{key}_avg"] = np.mean(values)
+                stats[f"{key}_std"] = np.std(values)
+
+        with open(os.path.join(self.output_dir, f"aggregated_results_{self.id}.json"), "w") as f:
+            json.dump(stats, f)
+        for notifier in self._notifiers.values():
+            notifier.notify_end(message=f"Aggregated results ({len(state['restarts'])} runs):", **stats)

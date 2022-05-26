@@ -10,7 +10,7 @@ setup(
     license="MIT",
     py_modules=["itrain"],
     install_requires=[
-        "adapter-transformers == 3.0.0",
+        "adapter-transformers == 3.0.1",
         "datasets",
         "scikit-learn",
         "seqeval == 1.2.2",
@@ -19,9 +19,11 @@ setup(
         "tqdm",
         "yagmail",
         "keyring",
+        "wandb",
+        "ruamel.yaml",
     ],
     entry_points={
-        "console_scripts": ["itrain=itrain.itrain:main"]
+        "console_scripts": ["itrain=itrain.cli:main"]
     },
     classifiers=[
         "Development Status :: 3 - Alpha",

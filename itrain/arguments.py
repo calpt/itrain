@@ -83,6 +83,9 @@ class DatasetArguments:
     def identifier(self):
         return "_".join([self.dataset_name, self.task_name or "", str(self.max_seq_length)])
 
+    def to_dict(self):
+        return dataclasses.asdict(self)
+
 
 @dataclass
 class ModelArguments:
@@ -124,6 +127,9 @@ class ModelArguments:
     )
     drop_last_fusion_layer: string_to_bool = False
     drop_model_head: string_to_bool = False
+
+    def to_dict(self):
+        return dataclasses.asdict(self)
 
 
 @dataclass
@@ -167,8 +173,6 @@ class RunArguments:
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
-    logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
-
     checkpoint_steps: int = field(default=0, metadata={"help": "Save model checkpoint after every X steps."})
     checkpoint_epochs: int = field(default=0, metadata={"help": "Save model checkpoint after every X epochs."})
     save_total_limit: Optional[int] = field(
@@ -190,12 +194,6 @@ class RunArguments:
     def device(self):
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def to_json_string(self):
-        """
-        Serializes this instance to a JSON string.
-        """
-        return json.dumps(dataclasses.asdict(self), indent=2)
-
     def to_sanitized_dict(self) -> Dict[str, Any]:
         """
         Sanitized serialization to use with TensorBoard’s hparams
@@ -203,6 +201,9 @@ class RunArguments:
         d = dataclasses.asdict(self)
         valid_types = [bool, int, float, str, torch.Tensor]
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}
+
+    def to_dict(self):
+        return dataclasses.asdict(self)
 
     def to_hf_training_args(self) -> TrainingArguments:
         evaluation_strategy = "epoch" if self.evaluate_during_training else "no"
@@ -227,7 +228,6 @@ class RunArguments:
             num_train_epochs=self.num_train_epochs,
             max_steps=self.max_steps,
             warmup_steps=self.warmup_steps,
-            logging_dir=self.logging_dir,
             save_strategy=save_strategy,
             save_steps=self.checkpoint_steps,
             save_total_limit=self.save_total_limit,

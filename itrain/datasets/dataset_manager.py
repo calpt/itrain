@@ -9,7 +9,7 @@ from typing import List, Union
 import torch
 from datasets import DatasetDict, DownloadMode, Metric, Split, load_dataset, load_metric
 from transformers import PreTrainedTokenizerBase, default_data_collator
-from transformers.file_utils import torch_cache_home
+from transformers.utils.hub import torch_cache_home
 
 from ..arguments import DatasetArguments
 from .sampler import RandomSampler

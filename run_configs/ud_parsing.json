@@ -12,11 +12,15 @@
         "adapter_config": "pfeiffer"
     },
     "training": {
-        "learning_rate": 5e-4,
+        "learning_rate": 0.0005,
         "batch_size": 12,
         "num_train_epochs": 30,
         "patience": 2,
         "patience_metric": "eval_uas"
     },
-    "evaluation": "test"
+    "evaluation": "test",
+    "logging": {
+        "wandb": {}
+    },
+    "restarts": 3
 }

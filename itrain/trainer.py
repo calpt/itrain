@@ -39,6 +39,7 @@ class TrainerMixin:
         model: PreTrainedModel,
         args: RunArguments,
         dataset_manager: DatasetManager,
+        loggers=None,
     ):
         super().__init__(
             model,
@@ -51,6 +52,18 @@ class TrainerMixin:
         )
         self.dataset_manager = dataset_manager
         self.label_names = self.dataset_manager.label_column_names
+
+        if loggers is not None:
+            report_to = []
+            for name, config in loggers.items():
+                if name == "tensorboard":
+                    report_to.append("tensorboard")
+                    self.args.logging_dir = config["logging_dir"]
+                elif name == "wandb":
+                    report_to.append("wandb")
+                else:
+                    raise ValueError(f"Unknown logger name: {name}.")
+            self.args.report_to = report_to
 
         # early stopping
         if args.patience > 0:

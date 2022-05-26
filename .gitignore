@@ -13,3 +13,4 @@ samples
 *.csv
 /task_selection/output
 trained_*_map.json
+/wandb

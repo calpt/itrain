@@ -30,6 +30,10 @@ class Notifier(ABC):
     def notify_end(self, message=None, **kwargs):
         pass
 
+    @abstractmethod
+    def to_dict(self):
+        pass
+
     def _format_kwargs(self, kwargs):
         return "\n".join([f"{k}:  {v}" for k, v in kwargs.items()])
 
@@ -88,6 +92,13 @@ class TelegramNotifier(Notifier):
         else:
             self.telegram.send_message(text, title=title, icon=END_ICON)
 
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "recipients": self.recipients,
+            "title": self.title,
+        }
+
 
 class EmailNotifier(Notifier):
     name = "email"
@@ -95,6 +106,7 @@ class EmailNotifier(Notifier):
     def __init__(self, recipients: List[str], sender: str = None, title=None):
         super().__init__(title=title)
         self.recipients = recipients
+        self.sender = sender
         self.mail_sender = yagmail.SMTP(user=sender)
 
     def notify_start(self, message=None, **kwargs):
@@ -122,6 +134,14 @@ class EmailNotifier(Notifier):
         text += self._get_run_time()
         for recipient in self.recipients:
             self.mail_sender.send(to=recipient, subject=title, contents=text)
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "recipients": self.recipients,
+            "sender": self.sender,
+            "title": self.title,
+        }
 
 
 NOTIFIER_CLASSES = {}
