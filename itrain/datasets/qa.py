@@ -17,6 +17,7 @@ class QADatasetManager(DatasetManagerBase):
     Base dataset manager for SQuAD-like extractive QA tasks.
     """
 
+    task_type = "question_answering"
     label_column_names = ["start_positions", "end_positions"]
     tasks_with_negatives = [
         "squad_v2",
@@ -30,7 +31,6 @@ class QADatasetManager(DatasetManagerBase):
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         self.with_negative = (args.task_name or args.dataset_name) in self.tasks_with_negatives
         super().__init__(args, tokenizer=tokenizer, load_metric="squad_v2" if self.with_negative else "squad")
-        self.always_call_metrics = True
         self._encode_remove_columns = True
 
     def train_sampler(self):

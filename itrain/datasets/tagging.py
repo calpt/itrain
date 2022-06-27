@@ -14,6 +14,7 @@ class TaggingDatasetManager(DatasetManagerBase):
     Base dataset manager for all tagging tasks.
     This class is adapted from the run_ner.py example script of HuggingFace transformers.
     """
+    task_type = "tagging"
 
     def __init__(
         self,
@@ -66,7 +67,6 @@ class TaggingDatasetManager(DatasetManagerBase):
                 labels += self.test_split[self.column_config.label]
             self.label_list = self._get_label_list(labels)
             self.label_to_id = {l: i for i, l in enumerate(self.label_list)}
-        self.collate_fn = DataCollatorForTokenClassification(self.tokenizer)
 
     def encode_batch(self, examples):
         tokenized_inputs = self.tokenizer(
@@ -157,6 +157,9 @@ class TaggingDatasetManager(DatasetManagerBase):
 
     def get_tokenizer_config_kwargs(self):
         return {"add_prefix_space": True}
+
+    def get_data_collator(self, model=None):
+        return DataCollatorForTokenClassification(self.tokenizer)
 
     def get_prediction_head_config(self):
         return {

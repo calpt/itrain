@@ -6,6 +6,8 @@ import numpy as np
 import torch
 from transformers import AdapterTrainer as TransformersAdapterTrainer
 from transformers import EarlyStoppingCallback, EvalPrediction, PreTrainedModel
+from transformers import Seq2SeqAdapterTrainer as TransformersSeq2SeqAdapterTrainer
+from transformers import Seq2SeqTrainer as TransformersSeq2SeqTrainer
 from transformers import Trainer as TransformersTrainer
 from transformers import is_torch_tpu_available
 from transformers.trainer_utils import PredictionOutput
@@ -44,7 +46,7 @@ class TrainerMixin:
         super().__init__(
             model,
             args.to_hf_training_args(),
-            data_collator=dataset_manager.collate_fn,
+            data_collator=dataset_manager.get_data_collator(model),
             train_dataset=dataset_manager.train_split,
             eval_dataset=dataset_manager.dev_split,
             tokenizer=dataset_manager.tokenizer,
@@ -206,3 +208,29 @@ class QAAdapterTrainer(QATrainerMixin, TransformersAdapterTrainer):
 
 class QAFineTuningTrainer(QATrainerMixin, TransformersTrainer):
     pass
+
+
+class Seq2SeqAdapterTrainer(TrainerMixin, TransformersSeq2SeqAdapterTrainer):
+    pass
+
+
+class Seq2SeqFineTuningTrainer(TrainerMixin, TransformersSeq2SeqTrainer):
+    pass
+
+
+def get_trainer_class(task_type: str, is_full_finetuning: bool) -> TrainerMixin:
+    if task_type == "question_answering":
+        if not is_full_finetuning:
+            return QAAdapterTrainer
+        else:
+            return QAFineTuningTrainer
+    elif task_type == "summarization":
+        if not is_full_finetuning:
+            return Seq2SeqAdapterTrainer
+        else:
+            return Seq2SeqFineTuningTrainer
+    else:
+        if not is_full_finetuning:
+            return AdapterTrainer
+        else:
+            return FineTuningTrainer

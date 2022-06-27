@@ -15,6 +15,7 @@ class ClassificationDatasetManager(DatasetManagerBase):
     Base dataset manager for sequence classification tasks.
     """
 
+    task_type = "classification"
     tasks_num_labels = {
         "imdb": 2,
         "rotten_tomatoes": 2,

@@ -71,6 +71,43 @@ class DatasetArguments:
             "help": "Seed for the random number generator for sampling training data."
         },
     )
+    pad_to_max_length: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to pad all samples to `max_seq_length`. "
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch (which can "
+            "be faster on GPU but will be slower on TPU)."
+        },
+    )
+
+    # --- Seq2Seq tasks ---
+
+    max_source_length: Optional[int] = field(
+        default=1024,
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
+    max_target_length: Optional[int] = field(
+        default=128,
+        metadata={
+            "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
+    val_max_target_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+            "during ``evaluate`` and ``predict``."
+        },
+    )
+    source_prefix: Optional[str] = field(
+        default="", metadata={"help": "A prefix to add before every source text (useful for T5 models)."}
+    )
 
     @property
     def base_name(self):
@@ -153,6 +190,9 @@ class RunArguments:
     patience_metric: str = field(
         default=None, metadata={"help": "Metric used for early stopping. Loss by default."}
     )
+    load_best_model_at_end: string_to_bool = field(
+        default=True,
+    )
 
     batch_size: int = field(default=16, metadata={"help": "Batch size."})
 
@@ -233,6 +273,6 @@ class RunArguments:
             save_total_limit=self.save_total_limit,
             past_index=self.past_index,
             # For early stopping
-            load_best_model_at_end=self.patience > 0,
+            load_best_model_at_end=True,
             metric_for_best_model=self.patience_metric,
         )

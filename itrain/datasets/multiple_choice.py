@@ -17,6 +17,7 @@ class MultipleChoiceDatasetManager(DatasetManagerBase):
     """
     Base dataset manager for multiple-choice tasks.
     """
+    task_type = "multiple_choice"
 
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
         super().__init__(args, tokenizer, load_metric=False)

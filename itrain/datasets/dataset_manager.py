@@ -40,6 +40,7 @@ class DatasetManager(ABC):
     All dataset implementations should at least inherit from this class.
     """
 
+    task_type: str
     label_column_names = ["labels"]
 
     def __init__(
@@ -58,7 +59,6 @@ class DatasetManager(ABC):
         self.train_split_name = Split.TRAIN
         self.dev_split_name = Split.VALIDATION
         self.test_split_name = Split.TEST
-        self.always_call_metrics = False  # a bit hacky but ensures metrics are computed for qa
 
     @property
     def name(self):
@@ -106,9 +106,6 @@ class DatasetManager(ABC):
             g.manual_seed(self.args.train_sampling_seed)
         return RandomSampler(self.train_split, num_samples=self.args.train_subset_size, generator=g)
 
-    def collate_fn(self, features):
-        return default_data_collator(features)
-
     @abstractmethod
     def compute_metrics(self, predictions, references):
         pass
@@ -130,6 +127,9 @@ class DatasetManager(ABC):
 
     def get_model_config_kwargs(self):
         return {}
+
+    def get_data_collator(self, model=None):
+        return default_data_collator
 
     @abstractmethod
     def get_prediction_head_config(self):
@@ -228,9 +228,6 @@ class DatasetManagerBase(DatasetManager):
             if set(self.label_column_names) <= set(self.dataset[split_name].column_names):
                 format_columns += self.label_column_names
             self.dataset[split_name].set_format(columns=format_columns + self.tokenizer.model_input_names)
-
-    def collate_fn(self, features):
-        return default_data_collator(features)
 
     def compute_metrics(self, predictions, references):
         if isinstance(predictions, tuple):

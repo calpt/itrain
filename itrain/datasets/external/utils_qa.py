@@ -51,7 +51,7 @@ def prepare_train_features(
         stride=data_args.doc_stride,
         return_overflowing_tokens=True,
         return_offsets_mapping=True,
-        padding="max_length",
+        padding="max_length" if data_args.pad_to_max_length else False,
     )
 
     # Since one example might give us several features if it has a long context, we need a map from a feature to
@@ -135,7 +135,7 @@ def prepare_validation_features(
         stride=data_args.doc_stride,
         return_overflowing_tokens=True,
         return_offsets_mapping=True,
-        padding="max_length",
+        padding="max_length" if data_args.pad_to_max_length else False,
     )
 
     # Since one example might give us several features if it has a long context, we need a map from a feature to

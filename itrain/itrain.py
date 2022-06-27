@@ -12,10 +12,10 @@ from ruamel.yaml import YAML
 from transformers import PreTrainedModel
 
 from .arguments import DatasetArguments, ModelArguments, RunArguments
-from .datasets import DATASET_MANAGER_CLASSES, DatasetManager, QADatasetManager
+from .datasets import DATASET_MANAGER_CLASSES, DatasetManager
 from .model_creator import create_model, create_tokenizer, register_heads
 from .notifier import NOTIFIER_CLASSES
-from .trainer import AdapterTrainer, FineTuningTrainer, QAAdapterTrainer, QAFineTuningTrainer, set_seed
+from .trainer import get_trainer_class, set_seed
 
 
 OUTPUT_FOLDER = os.environ.get("ITRAIN_OUTPUT") or "run_output"
@@ -120,7 +120,7 @@ class Setup:
 
     @classmethod
     def from_dict(cls, config, overrides=None):
-        setup = cls(id=config["id"], name=config["name"])
+        setup = cls(id=config.get("id", 0), name=config.get("name", None))
         dataset_args = DatasetArguments(**config["dataset"])
         if overrides:
             dataset_args = setup._override(dataset_args, overrides)
@@ -257,18 +257,6 @@ class Setup:
             prepared_args = self._override(prepared_args, overrides)
         return prepared_args
 
-    def _get_trainer_class(self, is_full_finetuning):
-        if isinstance(self.dataset_manager, QADatasetManager):
-            if not is_full_finetuning:
-                return QAAdapterTrainer
-            else:
-                return QAFineTuningTrainer
-        else:
-            if not is_full_finetuning:
-                return AdapterTrainer
-            else:
-                return FineTuningTrainer
-
     def run(self, restarts=None, first_run_index=0):
         """
         Run this setup. Dataset, model, and training or evaluation are expected to be set.
@@ -376,7 +364,7 @@ class Setup:
         # Configure and run training
         if self._train_run_args:
             train_run_args = self._prepare_run_args(self._train_run_args, trial=i if has_restarts else None)
-            trainer_class = self._get_trainer_class(is_full_finetuning)
+            trainer_class = get_trainer_class(self.dataset_manager.task_type, is_full_finetuning)
             trainer = trainer_class(
                 self.model_instance,
                 train_run_args,
@@ -439,7 +427,7 @@ class Setup:
             eval_run_args = self._prepare_run_args(
                 self._eval_run_args or self._train_run_args, trial=i if has_restarts else None
             )
-            trainer_class = self._get_trainer_class(is_full_finetuning)
+            trainer_class = get_trainer_class(self.dataset_manager.task_type, is_full_finetuning)
             trainer = trainer_class(
                 self.model_instance,
                 eval_run_args,

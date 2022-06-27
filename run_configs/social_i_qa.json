@@ -18,7 +18,9 @@
     },
     "evaluation": true,
     "logging": {
-        "wandb": {}
+        "wandb": {
+        "project": "itrain-experiments"
+    }
     },
     "restarts": 3
 }

@@ -103,6 +103,7 @@ class ParsingMetric:
 
 
 class UniversalDependenciesManager(DatasetManagerBase):
+    task_type = "dependency_parsing"
     label_column_names = ["labels_rels", "labels_arcs", "word_starts"]
 
     def __init__(self, args: DatasetArguments, tokenizer: PreTrainedTokenizerBase = None):
