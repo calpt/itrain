@@ -34,6 +34,9 @@ def main():
     # "resume" command
     parser_resume = subparsers.add_parser("resume", help="Resume setup.")
     parser_resume.add_argument("directory", type=str, help="Path to the directory holding a previously run setup.")
+    restarts_group_2 = parser_resume.add_mutually_exclusive_group()
+    restarts_group_2.add_argument("--add_seeds", type=lambda s: [int(item) for item in s.split(",")])
+    restarts_group_2.add_argument("--add_restarts", type=int, default=None)
 
     args = vars(parser.parse_args())
 
@@ -48,7 +51,10 @@ def main():
             setup.run(restarts=args.pop("seeds") or args.pop("restarts"))
     elif args["command"] == "resume":
         setup = Setup.from_file(os.path.join(args["directory"], SETUP_OUTPUT_FILE))
-        setup.resume(os.path.join(args["directory"], STATE_OUTPUT_FILE))
+        setup.resume(
+            os.path.join(args["directory"], STATE_OUTPUT_FILE),
+            add_restarts=args.pop("add_seeds") or args.pop("add_restarts"),
+        )
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import dataclasses
 import json
 import logging
 import os
+import time
 from collections import defaultdict
 from typing import List, Optional, Sequence, Union
 
@@ -236,7 +237,13 @@ class Setup:
                         wandb_kwargs["name"] = wandb_kwargs["name"] + f"-{trial}"
                 wandb_kwargs["resume"] = do_resume
                 wandb_kwargs["id"] = wandb_kwargs["name"]
-                wandb.init(**wandb_kwargs)
+                while True:
+                    try:
+                        wandb.init(**wandb_kwargs)
+                        break
+                    except Exception:
+                        print("Retrying wandb.init...")
+                        time.sleep(20)
             else:
                 raise ValueError(f"Unknown logger name: {name}.")
 
@@ -300,7 +307,7 @@ class Setup:
 
         return dict(state["all_results"])
 
-    def resume(self, file):
+    def resume(self, file, add_restarts=None):
         """
         Resume running this setup from a given run state.
 
@@ -315,10 +322,16 @@ class Setup:
         # Load dataset
         self.dataset_manager.load_and_preprocess()
 
+        if isinstance(add_restarts, int):
+            restarts = [None for _ in range(add_restarts)]
+
         # Load run state
         with open(file, "r") as f:
             state = json.load(f)
             restarts = state["restarts"]
+
+            if add_restarts is not None:
+                restarts = restarts + add_restarts
 
         # Init notifiers
         self._init_notifiers(num_runs=len(restarts))

@@ -2,6 +2,7 @@ env
 .vscode
 __pycache__
 *.egg-info
+training_scripts
 run_output
 fusion_output
 transfer_output
@@ -13,4 +14,5 @@ samples
 *.csv
 /task_selection/output
 trained_*_map.json
+task_map.json
 /wandb

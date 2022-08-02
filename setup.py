@@ -10,7 +10,7 @@ setup(
     license="MIT",
     py_modules=["itrain"],
     install_requires=[
-        "adapter-transformers ~= 3.0.0",
+        "adapter-transformers >= 3.0.0",
         "datasets",
         "nltk",
         "scikit-learn",
