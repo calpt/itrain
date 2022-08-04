@@ -48,7 +48,8 @@ def main():
             setup._setup_tokenizer()
             setup.dataset_manager.load_and_preprocess(CacheMode.USE_DATASET_NEW_FEATURES)
         else:
-            setup.run(restarts=args.pop("seeds") or args.pop("restarts"))
+            setup.restarts = args.pop("seeds") or args.pop("restarts")
+            setup.run()
     elif args["command"] == "resume":
         setup = Setup.from_file(os.path.join(args["directory"], SETUP_OUTPUT_FILE))
         setup.resume(

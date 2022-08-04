@@ -12,6 +12,7 @@
     "training": {
         "learning_rate": 0.0001,
         "batch_size": 16,
+        "gradient_accumulation_steps": 2,
         "num_train_epochs": 15,
         "patience": 4,
         "patience_metric": "eval_f1"

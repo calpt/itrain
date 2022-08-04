@@ -159,6 +159,13 @@ class DatasetManagerBase(DatasetManager):
         label_list.sort()
         return label_list
 
+    def _load_dataset(self, download_mode):
+        return load_dataset(
+            self._dataset_loc,
+            self.args.task_name if self._use_task_name_for_loading else self._default_subset_name,
+            download_mode=download_mode,
+        )
+
     def load(self, cache_mode: CacheMode = CacheMode.USE_DATASET_USE_FEATURES):
         # load dataset
         download_mode = (
@@ -166,11 +173,7 @@ class DatasetManagerBase(DatasetManager):
             if cache_mode == CacheMode.NEW_DATASET_NEW_FEATURES
             else DownloadMode.REUSE_DATASET_IF_EXISTS
         )
-        self.dataset = load_dataset(
-            self._dataset_loc,
-            self.args.task_name if self._use_task_name_for_loading else self._default_subset_name,
-            download_mode=download_mode,
-        )
+        self.dataset = self._load_dataset(download_mode)
         # split a validation set from the training set if not present
         if self.dev_split_name not in self.dataset:
             logger.warning("Dataset does not have a pre-defined validation split. Creating one from the training set.")

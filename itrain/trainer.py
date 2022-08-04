@@ -45,7 +45,7 @@ class TrainerMixin:
     ):
         super().__init__(
             model,
-            args.to_hf_training_args(),
+            args.to_hf_training_args(loggers),
             data_collator=dataset_manager.get_data_collator(model),
             train_dataset=dataset_manager.train_split,
             eval_dataset=dataset_manager.dev_split,
@@ -54,18 +54,6 @@ class TrainerMixin:
         )
         self.dataset_manager = dataset_manager
         self.label_names = self.dataset_manager.label_column_names
-
-        if loggers is not None:
-            report_to = []
-            for name, config in loggers.items():
-                if name == "tensorboard":
-                    report_to.append("tensorboard")
-                    self.args.logging_dir = config["logging_dir"]
-                elif name == "wandb":
-                    report_to.append("wandb")
-                else:
-                    raise ValueError(f"Unknown logger name: {name}.")
-            self.args.report_to = report_to
 
         # early stopping
         if args.patience > 0:

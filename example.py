@@ -35,5 +35,5 @@ setup.evaluation()
 setup.notify("telegram")
 
 # Run the setup
-results = setup.run(restarts=1)
+results = setup.run()
 print(results)

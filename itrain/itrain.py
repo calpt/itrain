@@ -51,7 +51,7 @@ class Setup:
         self._train_run_args = None
         self._do_eval = False
         self._eval_run_args = None
-        self._eval_split = None
+        self._eval_splits = []
         self._loggers = {}
         self._notifiers = {}
         self.restarts = None
@@ -90,13 +90,14 @@ class Setup:
         """
         self._train_run_args = args
 
-    def evaluation(self, args: Optional[RunArguments] = None, split=None):
+    def evaluation(self, args: Optional[RunArguments] = None, split=None, key=None):
         """
         Set up evaluation.
         """
         self._do_eval = True
         self._eval_run_args = args
-        self._eval_split = split
+        if split is not None:
+            self._eval_splits.append({"split": split, "key": key})
 
     def logging(self, logger_name: str, **kwargs):
         """
@@ -141,6 +142,9 @@ class Setup:
                 if overrides:
                     eval_args = setup._override(eval_args, overrides)
                 setup.evaluation(eval_args)
+            elif isinstance(config["evaluation"], list):
+                for eval_split in config["evaluation"]:
+                    setup.evaluation(split=eval_split["split"], key=eval_split.get("key", None))
             elif isinstance(config["evaluation"], str):
                 setup.evaluation(split=config["evaluation"])
             elif config["evaluation"]:
@@ -151,7 +155,7 @@ class Setup:
         if "notify" in config:
             for notifier_name, kwargs in config["notify"].items():
                 setup.notify(notifier_name, **kwargs)
-        setup.restarts = config["restarts"]
+        setup.restarts = overrides.get("restarts", config["restarts"])
 
         return setup
 
@@ -162,7 +166,7 @@ class Setup:
             "dataset": self.dataset_manager.args.to_dict(),
             "model": self.model_args.to_dict(),
             "training": self._train_run_args.to_dict() if self._train_run_args else None,
-            "evaluation": self._eval_run_args.to_dict() if self._eval_run_args else (self._eval_split or self._do_eval),
+            "evaluation": self._eval_run_args.to_dict() if self._eval_run_args else (self._eval_splits or self._do_eval),
             "logging": self._loggers,
             "notify": {k: v.to_dict() for k, v in self._notifiers.items()},
             "restarts": self.restarts,
@@ -264,15 +268,11 @@ class Setup:
             prepared_args = self._override(prepared_args, overrides)
         return prepared_args
 
-    def run(self, restarts=None, first_run_index=0):
+    def run(self, first_run_index=0):
         """
         Run this setup. Dataset, model, and training or evaluation are expected to be set.
 
         Args:
-            restarts (Union[list, int], optional): Defines the random training restarts. Can be either:
-                - a list of integers: run training with each of the given values as random seed.
-                - a single integer: number of random restarts, each with a random seed.
-                - None (default): one random restart.
             first_run_index (int, optional): The start index in the sequence of random restarts. Defaults to 0.
 
         Returns:
@@ -283,7 +283,7 @@ class Setup:
         # Load dataset
         self.dataset_manager.load_and_preprocess()
 
-        restarts = restarts or self.restarts
+        restarts = self.restarts
         if not restarts:
             restarts = [42]
         if not isinstance(restarts, Sequence):
@@ -382,6 +382,7 @@ class Setup:
                 self.model_instance,
                 train_run_args,
                 self.dataset_manager,
+                loggers=self._loggers,
             )
             if not has_restarts:
                 for notifier in self._notifiers.values():
@@ -445,18 +446,28 @@ class Setup:
                 self.model_instance,
                 eval_run_args,
                 self.dataset_manager,
+                loggers=self._loggers,
             )
             try:
-                eval_dataset = self.dataset_manager.dataset[self._eval_split] if self._eval_split else None
-                results = trainer.evaluate(eval_dataset=eval_dataset)
+                if len(self._eval_splits) > 0:
+                    results = {}
+                    for split in self._eval_splits:
+                        eval_dataset = self.dataset_manager.dataset[split["split"]]
+                        if split["key"] is not None:
+                            metric_key_prefix = "eval_" + split["key"]
+                        else:
+                            metric_key_prefix = "eval"
+                        split_results = trainer.evaluate(eval_dataset=eval_dataset, metric_key_prefix=metric_key_prefix)
+                        results.update(split_results)
+                        results[metric_key_prefix + "_split"] = split["split"]
+                else:
+                    results = trainer.evaluate()
             except Exception as ex:
                 for notifier in self._notifiers.values():
                     notifier.notify_error(f"{ex.__class__.__name__}: {ex}")
                 raise ex
             if epoch:
                 results["training_epochs"] = epoch
-            if self._eval_split:
-                results["eval_split"] = self._eval_split
             if best_model_dir:
                 results["best_model_dir"] = best_model_dir
             output_eval_file = os.path.join(eval_run_args.output_dir, "eval_results.txt")
@@ -491,6 +502,7 @@ class Setup:
             if isinstance(values[0], float):
                 stats[f"{key}_avg"] = np.mean(values)
                 stats[f"{key}_std"] = np.std(values)
+        stats["restarts"] = len(state["restarts"])
 
         with open(os.path.join(self.output_dir, f"aggregated_results_{self.id}.json"), "w") as f:
             json.dump(stats, f)

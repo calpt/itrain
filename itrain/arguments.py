@@ -245,7 +245,7 @@ class RunArguments:
     def to_dict(self):
         return dataclasses.asdict(self)
 
-    def to_hf_training_args(self) -> TrainingArguments:
+    def to_hf_training_args(self, loggers=None) -> TrainingArguments:
         evaluation_strategy = "epoch" if self.evaluate_during_training else "no"
         if evaluation_strategy != "no":
             save_strategy = evaluation_strategy
@@ -255,6 +255,21 @@ class RunArguments:
             save_strategy = "steps"
         else:
             save_strategy = "no"
+
+        logging_dir = None
+        if loggers:
+            report_to = []
+            for name, config in loggers.items():
+                if name == "tensorboard":
+                    report_to.append("tensorboard")
+                    logging_dir = config["logging_dir"]
+                elif name == "wandb":
+                    report_to.append("wandb")
+                else:
+                    raise ValueError(f"Unknown logger name: {name}.")
+        else:
+            report_to = "none"
+
         return TrainingArguments(
             output_dir=self.output_dir,
             evaluation_strategy=evaluation_strategy,
@@ -272,6 +287,9 @@ class RunArguments:
             save_steps=self.checkpoint_steps,
             save_total_limit=self.save_total_limit,
             past_index=self.past_index,
+            # Loggers
+            report_to=report_to,
+            logging_dir=logging_dir,
             # For early stopping
             load_best_model_at_end=True,
             metric_for_best_model=self.patience_metric,
