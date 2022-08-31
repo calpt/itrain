@@ -38,13 +38,18 @@ class Setup:
 
     id: int
     name: str
+    tags: List[str]
     dataset_manager: DatasetManager
     model_instance: PreTrainedModel
     model_args: ModelArguments
 
-    def __init__(self, id=0, name=None):
+    def __init__(self, id=0, name=None, tags=None):
         self.id = id
         self.name = name
+        if tags is not None:
+            self.tags = tags
+        else:
+            self.tags = []
         self.dataset_manager = None
         self.model_instance = None
         self.model_args = None
@@ -122,7 +127,7 @@ class Setup:
 
     @classmethod
     def from_dict(cls, config, overrides=None):
-        setup = cls(id=config.get("id", 0), name=config.get("name", None))
+        setup = cls(id=config.get("id", 0), name=config.get("name", None), tags=config.get("tags", None))
         dataset_args = DatasetArguments(**config["dataset"])
         if overrides:
             dataset_args = setup._override(dataset_args, overrides)
@@ -163,6 +168,7 @@ class Setup:
         return {
             "id": self.id,
             "name": self.name,
+            "tags": self.tags,
             "dataset": self.dataset_manager.args.to_dict(),
             "model": self.model_args.to_dict(),
             "training": self._train_run_args.to_dict() if self._train_run_args else None,
@@ -241,13 +247,17 @@ class Setup:
                         wandb_kwargs["name"] = wandb_kwargs["name"] + f"-{trial}"
                 wandb_kwargs["resume"] = do_resume
                 wandb_kwargs["id"] = wandb_kwargs["name"]
-                while True:
+                wandb_kwargs["tags"] = self.tags
+                for _ in range(5):  # try a maximum of 5 times
                     try:
                         wandb.init(**wandb_kwargs)
                         break
                     except Exception:
                         print("Retrying wandb.init...")
                         time.sleep(20)
+                wandb.config["run_id"] = self.id
+                wandb.config.update(self.dataset_manager.args.to_dict())
+                wandb.config.update(self.model_args.to_dict())
             else:
                 raise ValueError(f"Unknown logger name: {name}.")
 

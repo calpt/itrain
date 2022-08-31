@@ -30,7 +30,7 @@ pip install -e .
 
 ### Command-line
 
-`itrain` can be invoked from the command line by passing a run configuration file in json format.
+`itrain` can be invoked from the command line by passing a run configuration file in YAML or JSON format.
 Example configurations for all currently supported tasks can be found in the [run_configs](run_configs) folder.
 All supported configuration keys are defined in [arguments.py](itrain/arguments.py).
 

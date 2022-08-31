@@ -48,6 +48,9 @@ def create_model(args: ModelArguments, manager: DatasetManager, use_classic_mode
         num_labels=num_labels,
         **manager.get_model_config_kwargs(),
     )
+    # HACK: ignore encoder hidden states in output of encoder-decoder models to avoid accumulation
+    if hasattr(config, "keys_to_ignore_at_inference"):
+        config.keys_to_ignore_at_inference += ["encoder_last_hidden_state"]
 
     if use_classic_model_class:
         head_type = head_config["head_type"]

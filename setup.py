@@ -16,7 +16,7 @@ setup(
         "scikit-learn",
         "seqeval == 1.2.2",
         "tgsend >= 0.3",
-        "torch ~= 1.11.0",
+        "torch >= 1.11.0",
         "tqdm",
         "yagmail",
         "keyring",

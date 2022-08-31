@@ -75,6 +75,8 @@ class QATrainerMixin(TrainerMixin):
 
     # Post-processing:
     def post_process_function(self, examples, features, predictions, stage="eval"):
+        # HACK: Make sure only two logits are passed to eval
+        predictions = predictions[:2]
         features.reset_format()
         # Post-processing: we match the start logits and end logits to answers in the original context.
         predictions = postprocess_qa_predictions(

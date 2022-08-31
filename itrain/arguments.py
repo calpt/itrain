@@ -224,7 +224,10 @@ class RunArguments:
             )
         },
     )
-
+    fp16: string_to_bool = field(
+        default=False,
+        metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
+    )
     past_index: int = field(
         default=-1,
         metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
@@ -286,6 +289,7 @@ class RunArguments:
             save_strategy=save_strategy,
             save_steps=self.checkpoint_steps,
             save_total_limit=self.save_total_limit,
+            fp16=self.fp16,
             past_index=self.past_index,
             # Loggers
             report_to=report_to,

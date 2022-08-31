@@ -16,6 +16,7 @@ def main():
     parser_run = subparsers.add_parser("run", help="Run setup.")
     parser_run.add_argument("config", type=str, help="Path to the json file containing the full training setup.")
     parser_run.add_argument("--id", type=int, default=0, help="ID of this run.")
+    parser_run.add_argument("--tags", type=lambda s: s.split(","), default="", help="Tags for this run.")
     parser_run.add_argument(
         "--preprocess_only", action="store_true", default=False, help="Only run dataset preprocessing."
     )
@@ -44,6 +45,7 @@ def main():
     if args["command"] == "run":
         setup = Setup.from_file(args["config"], overrides=args)
         setup.id = args.pop("id")
+        setup.tags = args.pop("tags")
         if args.pop("preprocess_only"):
             setup._setup_tokenizer()
             setup.dataset_manager.load_and_preprocess(CacheMode.USE_DATASET_NEW_FEATURES)
