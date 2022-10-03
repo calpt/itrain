@@ -38,11 +38,11 @@ All supported configuration keys are defined in [arguments.py](itrain/arguments.
 
 Running a setup from the command line can look like this:
 ```bash
-itrain run --id 42 run_configs/sst2.json
+itrain run --id 42 run_configs/sst2.yaml
 ```
 This will train an adapter on the SST-2 task using `robert-base` as the base model (as specified in the config file).
 
-Besides modifying configuration keys directly in the json file, they can be overriden using command line parameters.
+Besides modifying configuration keys directly in the YAML file, they can be overriden using command line parameters.
 E.g., we can modify the previous training run to fully fine-tune a `bert-base-uncased` model:
 ```bash
 itrain run --id 42 \
@@ -51,7 +51,7 @@ itrain run --id 42 \
     --learning_rate 3e-5 \
     --num_train_epochs 3 \
     --patience 0 \
-    run_configs/sst2.json
+    run_configs/sst2.yaml
 ```
 
 ### Python script
