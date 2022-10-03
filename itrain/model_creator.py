@@ -41,7 +41,9 @@ def register_heads(model):
 def create_model(args: ModelArguments, manager: DatasetManager, use_classic_model_class=False):
     head_config = manager.get_prediction_head_config()
     num_labels = (
-        head_config["num_choices"] if head_config["head_type"] == "multiple_choice" else head_config["num_labels"]
+        head_config["num_choices"]
+        if head_config["head_type"] == "multiple_choice"
+        else head_config.get("num_labels", 1)
     )
     config = AutoConfig.from_pretrained(
         args.config_name if args.config_name else args.model_name_or_path,

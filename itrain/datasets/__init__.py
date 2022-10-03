@@ -19,6 +19,7 @@ from .multiple_choice import (
     WinograndeManager,
 )
 from .qa import QADatasetManager
+from .summarization import SummarizationManager
 from .super_glue import SuperGlueManager
 from .tagging import FCEErrorDetectionManager, TaggingDatasetManager
 
@@ -74,4 +75,6 @@ DATASET_MANAGER_CLASSES = {
     "wnut_17": TaggingDatasetManager,
     "mit_movie": TaggingDatasetManager,
     "ud_parsing": UniversalDependenciesManager,
+    "xsum": SummarizationManager,
+    "cnn_dailymail": SummarizationManager,
 }

@@ -45,7 +45,7 @@ class TrainerMixin:
     ):
         super().__init__(
             model,
-            args.to_hf_training_args(loggers),
+            args.to_hf_training_args(self, loggers),
             data_collator=dataset_manager.get_data_collator(model),
             train_dataset=dataset_manager.train_split,
             eval_dataset=dataset_manager.dev_split,

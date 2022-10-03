@@ -69,7 +69,7 @@ class DatasetManager(ABC):
             name = self.args.dataset_name
         if self.args.train_subset_size > 0:
             name = f"{name}_n{self.args.train_subset_size}"
-        return name
+        return name.replace(".", "_")
 
     def _get_features_cache_file(self, split_name):
         return os.path.join(
@@ -180,6 +180,13 @@ class DatasetManagerBase(DatasetManager):
             train_dev_split = self.dataset[self.train_split_name].train_test_split(test_size=0.2)
             self.dataset[str(self.train_split_name)] = train_dev_split["train"]
             self.dataset[str(self.dev_split_name)] = train_dev_split["test"]
+
+        # limit eval samples if required
+        if self.args.max_eval_samples is not None:
+            max_eval_samples = min(self.args.max_eval_samples, len(self.dataset[str(self.dev_split_name)]))
+            self.dataset[str(self.dev_split_name)] = self.dataset[str(self.dev_split_name)].select(
+                range(max_eval_samples)
+            )
 
         # load metric
         if self.load_metric:

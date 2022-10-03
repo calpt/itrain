@@ -1,0 +1,35 @@
+{
+    "dataset": {
+        "dataset_name": "xsum",
+        "max_source_length": 512,
+        "max_target_length": 128,
+        "val_max_target_length": 60,
+        "max_eval_samples": 1600
+    },
+    "model": {
+        "model_name_or_path": "facebook/bart-base",
+        "use_fast_tokenizer": true,
+        "train_adapter": true,
+        "adapter_config": "pfeiffer"
+    },
+    "training": {
+        "learning_rate": 0.0001,
+        "lr_scheduler_type": "polynomial",
+        "batch_size": 8,
+        "gradient_accumulation_steps": 4,
+        "num_train_epochs": 30,
+        "fp16": true,
+        "patience": 4,
+        "patience_metric": "eval_rouge1",
+        "predict_with_generate": true,
+        "generation_max_length": 60,
+        "num_beams": 6
+    },
+    "evaluation": "test",
+    "logging": {
+        "wandb": {
+        "project": "itrain-experiments"
+    }
+    },
+    "restarts": 1
+}

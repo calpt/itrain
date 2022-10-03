@@ -22,6 +22,7 @@ setup(
         "keyring",
         "wandb",
         "ruamel.yaml",
+        "rouge_score",
     ],
     entry_points={
         "console_scripts": ["itrain=itrain.cli:main"]

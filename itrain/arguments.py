@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import torch
-from transformers import TrainingArguments
+from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments, TrainingArguments
 
 
 # from https://github.com/huggingface/transformers/blob/8e13b7359388882d93af5fe312efe56b6556fa23/src/transformers/hf_argparser.py#L29
@@ -67,9 +67,11 @@ class DatasetArguments:
     )
     train_sampling_seed: Optional[int] = field(
         default=None,
-        metadata={
-            "help": "Seed for the random number generator for sampling training data."
-        },
+        metadata={"help": "Seed for the random number generator for sampling training data."},
+    )
+    max_eval_samples: Optional[int] = field(
+        default=None,
+        metadata={"help": "Maximum number of samples to use for evaluation."},
     )
     pad_to_max_length: bool = field(
         default=True,
@@ -187,9 +189,7 @@ class RunArguments:
             "help": "If > 0 stops training after evaluating this many times consecutively with non-decreasing loss."
         },
     )
-    patience_metric: str = field(
-        default=None, metadata={"help": "Metric used for early stopping. Loss by default."}
-    )
+    patience_metric: str = field(default=None, metadata={"help": "Metric used for early stopping. Loss by default."})
     load_best_model_at_end: string_to_bool = field(
         default=True,
     )
@@ -202,6 +202,7 @@ class RunArguments:
     )
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for Adam."})
+    lr_scheduler_type: str = field(default="linear", metadata={"help": "The scheduler type to use."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay if we apply some."})
     adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for Adam optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
@@ -233,6 +234,26 @@ class RunArguments:
         metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
     )
 
+    # --- Seq2Seq Tasks ---
+
+    predict_with_generate: string_to_bool = field(
+        default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
+    )
+    generation_max_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "The `max_length` to use on each evaluation loop when `predict_with_generate=True`. Will default "
+            "to the `max_length` value of the model configuration."
+        },
+    )
+    num_beams: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "The `num_beams` to use on each evaluation loop when `predict_with_generate=True`. Will default "
+            "to the `num_beams` value of the model configuration."
+        },
+    )
+
     @property
     def device(self):
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -248,7 +269,7 @@ class RunArguments:
     def to_dict(self):
         return dataclasses.asdict(self)
 
-    def to_hf_training_args(self, loggers=None) -> TrainingArguments:
+    def to_hf_training_args(self, trainer, loggers=None) -> TrainingArguments:
         evaluation_strategy = "epoch" if self.evaluate_during_training else "no"
         if evaluation_strategy != "no":
             save_strategy = evaluation_strategy
@@ -273,13 +294,25 @@ class RunArguments:
         else:
             report_to = "none"
 
-        return TrainingArguments(
+        if isinstance(trainer, Seq2SeqTrainer):
+            args_class = Seq2SeqTrainingArguments
+            kwargs = {
+                "predict_with_generate": self.predict_with_generate,
+                "generation_max_length": self.generation_max_length,
+                "generation_num_beams": self.num_beams,
+            }
+        else:
+            args_class = TrainingArguments
+            kwargs = {}
+
+        return args_class(
             output_dir=self.output_dir,
             evaluation_strategy=evaluation_strategy,
             per_device_train_batch_size=self.batch_size,
             per_device_eval_batch_size=self.batch_size,
             gradient_accumulation_steps=self.gradient_accumulation_steps,
             learning_rate=self.learning_rate,
+            lr_scheduler_type=self.lr_scheduler_type,
             weight_decay=self.weight_decay,
             adam_epsilon=self.adam_epsilon,
             max_grad_norm=self.max_grad_norm,
@@ -297,4 +330,5 @@ class RunArguments:
             # For early stopping
             load_best_model_at_end=True,
             metric_for_best_model=self.patience_metric,
+            **kwargs,
         )

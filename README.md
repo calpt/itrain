@@ -1,5 +1,7 @@
 # itrain
 
+**⚠ WARNING: This software is developed for personal research experiments and subject to frequent changes/ fixes.** 
+
 > Ready-to-run scripts for Transformers and Adapters on >50 NLP tasks.
 
 This repository contains `itrain`, a small library that provides a simple interface for configuring training runs of **[Transformers](https://github.com/huggingface/transformers)** and **[Adapters](https://github.com/Adapter-Hub/adapter-transformers)** across [a wide range of NLP tasks](run_configs).
