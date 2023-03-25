@@ -1,7 +1,5 @@
 # itrain
 
-**⚠ WARNING: This software is developed for personal research experiments and subject to frequent changes/ fixes.** 
-
 > Ready-to-run scripts for Transformers and Adapters on >50 NLP tasks.
 
 This repository contains `itrain`, a small library that provides a simple interface for configuring training runs of **[Transformers](https://github.com/huggingface/transformers)** and **[Adapters](https://github.com/Adapter-Hub/adapter-transformers)** across [a wide range of NLP tasks](run_configs).
@@ -26,6 +24,11 @@ All additional requirements together with the `itrain` package can be installed 
 git clone https://github.com/calpt/itrain.git
 cd itrain
 pip install -e .
+```
+
+Alternatively, you can directly install via pip:
+```
+pip install git+https://github.com/calpt/itrain.git
 ```
 
 ## How To Use

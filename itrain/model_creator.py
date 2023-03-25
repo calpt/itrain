@@ -68,11 +68,7 @@ def create_model(args: ModelArguments, manager: DatasetManager, use_classic_mode
 
     # load pre-trained adapters
     if args.load_adapters is not None:
-        adapter_config = AdapterConfig.load(
-            args.adapter_config,
-            non_linearity=args.adapter_non_linearity,
-            reduction_factor=args.adapter_reduction_factor,
-        )
+        adapter_config = AdapterConfig.load(args.adapter_config)
         if isinstance(args.load_adapters, Mapping):
             for name, adapter in args.load_adapters.items():
                 model.load_adapter(adapter, config=adapter_config, load_as=name)
